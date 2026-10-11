@@ -25,6 +25,24 @@
         <label for="playerName">اسم تو توی بازی</label>
         <input id="playerName" maxlength="18" placeholder="مثلاً: قهرمان دیوارها" autocomplete="nickname">
       </div>
+      <div class="room-settings">
+        <fieldset class="choice-fieldset">
+          <legend>⏱ زمان هر بازیکن</legend>
+          <div class="choice-row">
+            <label class="choice"><input type="radio" name="duration" value="60"><span>۱ دقیقه</span></label>
+            <label class="choice"><input type="radio" name="duration" value="180" checked><span>۳ دقیقه</span></label>
+          </div>
+          <small class="choice-help">بعد از تمام شدن زمان، در هر نوبت فقط ۲ ثانیه فرصت داری.</small>
+        </fieldset>
+        <fieldset class="choice-fieldset">
+          <legend>🎨 رنگ مهره میزبان (تو)</legend>
+          <div class="choice-row">
+            <label class="choice"><input type="radio" name="hostColor" value="cyan" checked><span><i class="color-dot cyan"></i> فیروزه‌ای</span></label>
+            <label class="choice"><input type="radio" name="hostColor" value="orange"><span><i class="color-dot orange"></i> نارنجی</span></label>
+          </div>
+          <small class="choice-help">رنگ دوستت خودکار رنگ دیگه می‌شه؛ دیوارها هم رنگ مهره‌ها هستن.</small>
+        </fieldset>
+      </div>
       <button id="createBtn" class="btn primary wide"><span>＋</span> ساخت اتاق جدید <span class="arrow">←</span></button>
       <div class="separator"><span>یا وارد اتاق دوستت شو</span></div>
       <div class="join-row">
@@ -39,17 +57,24 @@
       <div class="game-main">
         <div class="game-heading">
           <div><span class="eyebrow">اتاق خصوصی</span><h1>بازی شروع شد!</h1></div>
-          <div class="room-badge"><span>کد اتاق</span><strong dir="ltr" id="gameCode">------</strong></div>
+          <div class="room-badge"><span>کد اتاق</span><strong dir="ltr" id="gameCode">------</strong><small id="gameDuration">۳ دقیقه</small></div>
         </div>
         <div class="board-shell">
           <div class="players-row">
-            <div class="player-chip player-one" id="player0"><span class="player-disc"></span><div><strong id="player0Name">بازیکن ۱</strong><small>هدف: رسیدن به بالا</small></div><b id="player0Walls">۱۰ 🧱</b></div>
+            <div class="player-chip player-one" id="player0"><span class="player-disc"></span><div><strong id="player0Name">بازیکن ۱</strong><small>هدف: رسیدن به بالا</small></div><div class="player-stats"><time id="player0Clock" class="clock" dir="ltr">03:00</time><b id="player0Walls">۱۰ 🧱</b></div></div>
             <div class="versus">VS</div>
-            <div class="player-chip player-two" id="player1"><span class="player-disc"></span><div><strong id="player1Name">منتظر...</strong><small>هدف: رسیدن به پایین</small></div><b id="player1Walls">۱۰ 🧱</b></div>
+            <div class="player-chip player-two" id="player1"><span class="player-disc"></span><div><strong id="player1Name">منتظر...</strong><small>هدف: رسیدن به پایین</small></div><div class="player-stats"><time id="player1Clock" class="clock" dir="ltr">03:00</time><b id="player1Walls">۱۰ 🧱</b></div></div>
           </div>
           <div id="turnStatus" class="turn-status" aria-live="polite">منتظر بازیکن دوم...</div>
-          <canvas id="board" width="600" height="600" aria-label="صفحه بازی نه در نه؛ برای حرکت یا قراردادن دیوار لمس کنید"></canvas>
-          <div class="board-labels"><span>↑ هدف بازیکن فیروزه‌ای</span><span>هدف بازیکن نارنجی ↓</span></div>
+          <canvas id="board" width="600" height="600" aria-label="صفحه بازی نه در نه؛ برای حرکت یا انتخاب پیش‌نمایش دیوار لمس کنید"></canvas>
+          <div id="wallPreviewControls" class="wall-preview-controls" hidden>
+            <span id="previewHelp">📍 جای دیوار رو انتخاب کن، بعد تأیید بزن.</span>
+            <div class="preview-buttons">
+              <button id="confirmWallBtn" class="btn primary" disabled>✓ تأیید دیوار</button>
+              <button id="cancelWallBtn" class="btn ghost">لغو</button>
+            </div>
+          </div>
+          <div class="board-labels"><span id="goal0">↑ هدف بازیکن اول</span><span id="goal1">هدف بازیکن دوم ↓</span></div>
         </div>
       </div>
       <aside class="sidebar">
@@ -70,7 +95,7 @@
           </div>
           <div id="gameError" class="error" role="alert" hidden></div>
         </section>
-        <section class="side-card howto-card"><div class="side-title"><span>💡</span> قانون‌های مهم</div><ul><li>در هر نوبت یا حرکت کن یا دیوار بذار.</li><li>نمی‌تونی راه رسیدن هیچ بازیکنی رو کامل ببندی.</li><li>اگه جلوی مهره حریف باشی، می‌تونی از روش بپری.</li><li>اولین نفر که به لبه مقابل برسه برنده‌ست.</li></ul></section>
+        <section class="side-card howto-card"><div class="side-title"><span>💡</span> قانون‌های مهم</div><ul><li>در هر نوبت یا حرکت کن یا دیوار بذار.</li><li>نمی‌تونی راه رسیدن هیچ بازیکنی رو کامل ببندی.</li><li>اگه جلوی مهره حریف باشی، می‌تونی از روش بپری.</li><li>اولین نفر که به لبه مقابل برسه برنده‌ست.</li><li>بعد از اتمام زمان اصلی، برای هر نوبت ۲ ثانیه فرصت داری؛ اگه حرکت نکنی، با زمان می‌بازی.</li><li>روی گوشی برای گذاشتن دیوار اول پیش‌نمایش رو انتخاب کن و بعد «تأیید دیوار» بزن.</li></ul></section>
         <button id="newRoomBtn" class="btn ghost wide">↻ خروج و ساخت اتاق دیگر</button>
       </aside>
     </section>

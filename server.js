@@ -21,12 +21,28 @@ function createRoomCode() {
   return code;
 }
 function token() { return crypto.randomBytes(24).toString('base64url'); }
-function initialState() {
+function initialState(durationSeconds = 180) {
   return {
+    // The server owns both chess clocks; clients only display them.
+    time: { durationSeconds, remainingMs: [durationSeconds * 1000, durationSeconds * 1000], turnStartedAt: null },
+    endReason: null,
     pawns: [{ r: 8, c: 4 }, { r: 0, c: 4 }],
     walls: [], remaining: [10, 10], turn: 0, winner: null,
     moveNumber: 1, startedAt: Date.now()
   };
+}
+// The reserve runs down only on a player's own turns. Once it reaches zero,
+// that player still gets a 2-second grace period on this and every later turn.
+// Failure to play before the grace period expires loses the game on time.
+function expireIfNeeded(room, now = Date.now()) {
+  const s = room.game;
+  if (room.players.length !== 2 || s.winner !== null || s.time.turnStartedAt === null) return false;
+  const elapsed = Math.max(0, now - s.time.turnStartedAt);
+  if (elapsed < s.time.remainingMs[s.turn] + 2000) return false;
+  s.time.remainingMs[s.turn] = 0;
+  s.winner = 1 - s.turn;
+  s.endReason = 'timeout';
+  return true;
 }
 function playerId(room, candidate) { return room.players.findIndex(p => p.token === candidate); }
 function isInside(r,c) { return r >= 0 && r < 9 && c >= 0 && c < 9; }
@@ -81,7 +97,10 @@ function publicState(room, id) {
   const s=room.game;
   return {
     room:room.code, you:id,
-    players: room.players.map((p,i)=>({id:i,name:p.name,side:SIDES[i]})),
+    players: room.players.map((p,i)=>({id:i,name:p.name,side:SIDES[i], color: i === 0 ? room.settings.hostColor : (room.settings.hostColor === 'cyan' ? 'orange' : 'cyan')})),
+    settings: room.settings,
+    time: { ...s.time, remainingMs: [...s.time.remainingMs], serverNow: Date.now() },
+    endReason: s.endReason,
     waiting:room.players.length<2,
     pawns:s.pawns, walls:s.walls, remaining:s.remaining,
     turn:s.turn, winner:s.winner, moveNumber:s.moveNumber,
@@ -132,7 +151,10 @@ async function api(req,res,url) {
   if (route==='/api/create' && req.method==='POST') {
     if (rooms.size>=MAX_ROOMS) return fail(res,503,'فعلاً اتاق جدید نمی‌توان ساخت.');
     const code=createRoomCode(), secret=token();
-    const room={code,players:[{name:cleanName(data.name),token:secret,listeners:new Set()}],game:initialState(),lastActivity:Date.now()};
+    const durationSeconds = [60,180].includes(data.durationSeconds) ? data.durationSeconds : 180;
+    const hostColor = data.hostColor === 'orange' ? 'orange' : 'cyan';
+    const settings = { durationSeconds, hostColor };
+    const room={code,settings,players:[{name:cleanName(data.name),token:secret,listeners:new Set()}],game:initialState(durationSeconds),lastActivity:Date.now()};
     rooms.set(code,room);
     return send(res,201,{room:code,token:secret,state:publicState(room,0)});
   }
@@ -142,12 +164,14 @@ async function api(req,res,url) {
     if (room.players.length>=2) return fail(res,409,'این اتاق دو بازیکن دارد و پر شده است.');
     const secret=token();
     room.players.push({name:cleanName(data.name),token:secret,listeners:new Set()});
+    room.game.time.turnStartedAt = Date.now(); // No clock runs while waiting for a friend.
     publish(room);
     return send(res,200,{room:code,token:secret,state:publicState(room,1)});
   }
   const session=auth(url.searchParams,data);
   if (!session) return fail(res,401,'دسترسی به اتاق مجاز نیست یا اتاق منقضی شده.');
   const {room,id}=session, s=room.game;
+  if (expireIfNeeded(room)) publish(room);
   if (route==='/api/state' && req.method==='GET') return send(res,200,{state:publicState(room,id)});
   if (route==='/api/events' && req.method==='GET') {
     res.writeHead(200,{
@@ -164,7 +188,8 @@ async function api(req,res,url) {
   if (route==='/api/restart' && req.method==='POST') {
     if (room.players.length<2) return fail(res,409,'بازیکن دوم هنوز نرسیده.');
     if (s.winner===null) return fail(res,409,'بازی هنوز تمام نشده.');
-    room.game=initialState();
+    room.game=initialState(room.settings.durationSeconds);
+    room.game.time.turnStartedAt = Date.now();
     publish(room);
     return send(res,200,{ok:true});
   }
@@ -176,14 +201,22 @@ async function api(req,res,url) {
       const r=data.r,c=data.c;
       if (!Number.isInteger(r)||!Number.isInteger(c)||!legalMoves(s,id).some(p=>p.r===r&&p.c===c)) return fail(res,400,'این حرکت مجاز نیست.');
       s.pawns[id]={r,c};
-      if (r===(id===0?0:8)) s.winner=id;
+      if (r===(id===0?0:8)) {s.winner=id;s.endReason='goal';}
     } else if (data.type==='wall') {
       if (s.remaining[id]===0) return fail(res,400,'دیوارهای تو تمام شده.');
       const {o,r,c}=data;
       if (!legalWall(s,o,r,c)) return fail(res,400,'اینجا نمی‌شود دیوار گذاشت؛ مسیر دو بازیکن باید باز بماند.');
-      s.walls.push({o,r,c}); s.remaining[id]--;
+      s.walls.push({o,r,c,owner:id}); s.remaining[id]--;
     } else return fail(res,400,'عمل ناشناخته است.');
-    if (s.winner===null) { s.turn=1-s.turn; s.moveNumber++; }
+    const now = Date.now();
+    s.time.remainingMs[id] = Math.max(0, s.time.remainingMs[id] - Math.max(0, now - s.time.turnStartedAt));
+    if (s.winner===null) {
+      s.turn=1-s.turn;
+      s.moveNumber++;
+      s.time.turnStartedAt=now;
+    } else {
+      s.time.turnStartedAt=null;
+    }
     publish(room);
     return send(res,200,{ok:true});
   }
@@ -199,7 +232,7 @@ function serveStatic(req,res,url) {
     if (err||!stat.isFile()) return fail(res,404,'صفحه پیدا نشد.');
     const ext=path.extname(file);
     const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml'};
-    res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':'public, max-age=300','X-Content-Type-Options':'nosniff'});
+    res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'});
     if (req.method==='HEAD') return res.end();
     fs.createReadStream(file).pipe(res);
   });
@@ -213,6 +246,7 @@ const server=http.createServer((req,res)=>{
 setInterval(()=>{
   const now=Date.now();
   for (const [code,room] of rooms) {
+    if (expireIfNeeded(room, now)) publish(room);
     if (now-room.lastActivity>1000*60*60*4) {
       for (const p of room.players) for (const res of p.listeners) res.end();
       rooms.delete(code); continue;
@@ -222,5 +256,12 @@ setInterval(()=>{
     }
   }
 },25_000).unref();
+// Check deadlines independently of client connections or browser timers.
+setInterval(() => {
+  const now = Date.now();
+  for (const room of rooms.values()) {
+    if (expireIfNeeded(room, now)) publish(room);
+  }
+}, 100).unref();
 server.listen(PORT,'0.0.0.0',()=>console.log(`Divarchin listening on http://localhost:${PORT}`));
 module.exports={initialState,hasWallBlock,legalWall,legalMoves,reachable};
