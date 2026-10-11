@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101325">
+  <meta name="description" content="دیوارچین؛ بازی استراتژی دونفره آنلاین با اتاق خصوصی و لینک دعوت">
+  <title>دیوارچین | بازی آنلاین دو نفره</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="glow glow-a"></div><div class="glow glow-b"></div>
+  <main class="container">
+    <header class="topbar">
+      <div class="logo"><div class="logo-mark">▦</div><div><div class="brand">دیوارچین <span class="spark">✦</span></div><div class="tagline">دوئل فکری آنلاین</div></div></div>
+      <span class="live-pill"><span class="live-dot"></span> دونفره و زنده</span>
+    </header>
+
+    <section id="lobby" class="lobby-card" aria-label="ساخت یا ورود به اتاق">
+      <div class="mini-tag">WALLS • STRATEGY • 1V1</div>
+      <h1>یه حرکت،<br><em>هزار تا راه!</em></h1>
+      <p class="intro">راهت رو پیدا کن، جلوی دوستت دیوار بذار و زودتر به طرف مقابل برس. همه‌چی از توی مرورگر گوشی.</p>
+      <div class="field-group">
+        <label for="playerName">اسم تو توی بازی</label>
+        <input id="playerName" maxlength="18" placeholder="مثلاً: قهرمان دیوارها" autocomplete="nickname">
+      </div>
+      <button id="createBtn" class="btn primary wide"><span>＋</span> ساخت اتاق جدید <span class="arrow">←</span></button>
+      <div class="separator"><span>یا وارد اتاق دوستت شو</span></div>
+      <div class="join-row">
+        <input id="roomCodeInput" maxlength="6" dir="ltr" placeholder="کد ۶ رقمی" autocapitalize="characters" aria-label="کد اتاق">
+        <button id="joinBtn" class="btn secondary">ورود به بازی ←</button>
+      </div>
+      <div id="lobbyError" class="error" role="alert" hidden></div>
+      <div class="lobby-hint"><span>🧱</span> هر نفر ۱۰ دیوار • صفحه ۹×۹ • کاملاً نوبتی</div>
+    </section>
+
+    <section id="game" class="game-layout" hidden>
+      <div class="game-main">
+        <div class="game-heading">
+          <div><span class="eyebrow">اتاق خصوصی</span><h1>بازی شروع شد!</h1></div>
+          <div class="room-badge"><span>کد اتاق</span><strong dir="ltr" id="gameCode">------</strong></div>
+        </div>
+        <div class="board-shell">
+          <div class="players-row">
+            <div class="player-chip player-one" id="player0"><span class="player-disc"></span><div><strong id="player0Name">بازیکن ۱</strong><small>هدف: رسیدن به بالا</small></div><b id="player0Walls">۱۰ 🧱</b></div>
+            <div class="versus">VS</div>
+            <div class="player-chip player-two" id="player1"><span class="player-disc"></span><div><strong id="player1Name">منتظر...</strong><small>هدف: رسیدن به پایین</small></div><b id="player1Walls">۱۰ 🧱</b></div>
+          </div>
+          <div id="turnStatus" class="turn-status" aria-live="polite">منتظر بازیکن دوم...</div>
+          <canvas id="board" width="600" height="600" aria-label="صفحه بازی نه در نه؛ برای حرکت یا قراردادن دیوار لمس کنید"></canvas>
+          <div class="board-labels"><span>↑ هدف بازیکن فیروزه‌ای</span><span>هدف بازیکن نارنجی ↓</span></div>
+        </div>
+      </div>
+      <aside class="sidebar">
+        <section class="side-card invite-card">
+          <div class="side-title"><span>🔗</span> دعوت از دوستت</div>
+          <p>لینک اتاق رو بفرست تا دوستت مستقیم به بازی وصل بشه.</p>
+          <button id="copyLinkBtn" class="btn primary wide">کپی لینک دعوت <span>⧉</span></button>
+          <button id="copyCodeBtn" class="btn ghost wide">کپی کد اتاق</button>
+          <div id="inviteNote" class="hint" aria-live="polite"></div>
+        </section>
+        <section class="side-card controls-card">
+          <div class="side-title"><span>🎮</span> حرکت بعدی</div>
+          <p class="controls-help">در هر نوبت، فقط یکی رو انتخاب کن:</p>
+          <div class="control-stack">
+            <button class="control-btn selected" data-mode="move"><span class="control-icon">♟</span><span><b>حرکت مهره</b><small>خانه‌های روشن رو لمس کن</small></span><span class="check">✓</span></button>
+            <button class="control-btn" data-mode="h"><span class="control-icon">━</span><span><b>دیوار افقی</b><small>دو خونه کنار هم رو ببند</small></span><span class="check">✓</span></button>
+            <button class="control-btn" data-mode="v"><span class="control-icon">┃</span><span><b>دیوار عمودی</b><small>دو خونه روی هم رو ببند</small></span><span class="check">✓</span></button>
+          </div>
+          <div id="gameError" class="error" role="alert" hidden></div>
+        </section>
+        <section class="side-card howto-card"><div class="side-title"><span>💡</span> قانون‌های مهم</div><ul><li>در هر نوبت یا حرکت کن یا دیوار بذار.</li><li>نمی‌تونی راه رسیدن هیچ بازیکنی رو کامل ببندی.</li><li>اگه جلوی مهره حریف باشی، می‌تونی از روش بپری.</li><li>اولین نفر که به لبه مقابل برسه برنده‌ست.</li></ul></section>
+        <button id="newRoomBtn" class="btn ghost wide">↻ خروج و ساخت اتاق دیگر</button>
+      </aside>
+    </section>
+
+    <div id="winnerOverlay" class="modal-backdrop" hidden><div class="modal"><div class="trophy">🏆</div><h2 id="winnerTitle">برنده شدی!</h2><p id="winnerText">چه بازی قشنگی!</p><button id="rematchBtn" class="btn primary wide">دوباره بازی کنیم ↻</button></div></div>
+    <footer>دیوارچین · ساخته‌شده برای رقابت دوستانه ✦</footer>
+  </main>
+</body>
+</html>
