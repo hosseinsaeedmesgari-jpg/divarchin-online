@@ -24,6 +24,8 @@
   let chatOpen=false, seenChatId=0, chatSending=false, currentChatRoom='';
   let animation=null, animationFrame=0;
   let account=null, accountsEnabled=false, authMode='login';
+  let currentView='', navStack=[], onExitConfirm=null, profileCache=null;
+  const views=['splashScreen','dashboardScreen','lobby','botSetupScreen','profileScreen','historyScreen','settingsScreen','accountScreen','leaderboardScreen','game','chatScreen'];
   const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const ctx=el.board.getContext('2d');
   const W=600, H=600, CELL=50, GAP=10, STEP=CELL+GAP, ORIGIN=(W-(9*CELL+8*GAP))/2;
@@ -34,10 +36,74 @@
   function msg(node,message) {node.textContent=message;node.hidden=!message;}
   function name() {return el.name.value.trim().slice(0,18)||'بازیکن';}
   function setBusy(b) {el.create.disabled=b;el.join.disabled=b;}
-  function showLobby() {
-    el.accountScreen.hidden=true;el.leaderboardScreen.hidden=true;
-    if(!state)el.lobby.hidden=false;
+  function navigate(view, push=true) {
+    if(!views.includes(view))return;
+    if(push && currentView && currentView!==view) {
+      navStack.push(currentView);
+      if(navStack.length>30)navStack.shift();
+      try { history.pushState({divarchin:true,view},'',location.href); } catch { /* history optional */ }
+    }
+    currentView=view;
+    for(const id of views) $(id).hidden=id!==view;
+    document.body.classList.toggle('showing-splash',view==='splashScreen');
+    el.winnerOverlay.hidden = view!=='game' || !state || state.winner===null;
+    if(view==='dashboardScreen') updateDashboard();
+    if(view==='game' && state){render();updateClocks();}
+    window.scrollTo({top:0,behavior:'instant'});
   }
+  function showLobby(){navigate('dashboardScreen');}
+  function updateDashboard(){
+    $('dashGreeting').textContent=account?'سلام '+account.username+'!':'سلام، به دیوارچین خوش اومدی!';
+    $('dashCaption').textContent=account?`امتیاز ${account.rating.toLocaleString('fa-IR')} • ${account.wins.toLocaleString('fa-IR')} برد`:'برای رنکینگ می‌تونی یک حساب رایگان بسازی.';
+    $('dashboardGuestTip').hidden=!!account;
+    $('dashboardResumeBtn').hidden=!state;
+  }
+  function showExitConfirmation(title,description,confirmed){
+    $('exitConfirmTitle').textContent=title;
+    $('exitConfirmText').textContent=description;
+    onExitConfirm=confirmed;$('exitConfirmOverlay').hidden=false;
+  }
+  function leaveRoom(){
+    if(stream)stream.close();stream=null;
+    room='';secret='';state=null;mode='move';hover=null;selectedWall=null;lastMoveNumber=-1;
+    chatOpen=false;seenChatId=0;currentChatRoom='';animation=null;navStack=[];
+    if(animationFrame)cancelAnimationFrame(animationFrame);animationFrame=0;
+    el.chatMessages.dataset.lastId='';
+    sessionStorage.removeItem('divarchin-last');
+    try{history.replaceState({divarchin:true},'',location.pathname);}catch{}
+    msg(el.gameError,'');el.inviteNote.textContent='';
+    updateDashboard();void refreshAccount();navigate('dashboardScreen');
+  }
+  function handleBack(){
+    if(!$('exitConfirmOverlay').hidden){$('exitConfirmOverlay').hidden=true;return 'handled';}
+    if(currentView==='game') {
+      showExitConfirmation('خروج از مسابقه؟',
+        'اگر مسابقه هنوز فعاله، با خروج ساعت بازی متوقف نمی‌شه و ممکنه زمانت تمام بشه. مطمئنی می‌خوای به داشبورد برگردی؟',
+        leaveRoom);return 'handled';
+    }
+    if(currentView==='chatScreen'){closeChat();return 'handled';}
+    if(currentView==='historyScreen'){
+      const previous=navStack.pop();
+      navigate(previous==='profileScreen'?'profileScreen':'dashboardScreen',false);return 'handled';
+    }
+    if(currentView==='splashScreen'||currentView==='dashboardScreen')return 'exit';
+    const previous=navStack.pop();
+    navigate(previous && previous!=='splashScreen' && previous!=='chatScreen' && previous!=='game' ? previous : 'dashboardScreen',false);
+    return 'handled';
+  }
+  window.divarchinHandleBack=handleBack;
+  // Browser back also navigates within the app instead of unexpectedly abandoning a timed match.
+  window.addEventListener('popstate',()=>{
+    const result=handleBack();
+    if(result==='exit')showExitConfirmation('خروج از دیوارچین؟','برای خروج می‌تونی این برگه مرورگر رو ببندی.',()=>{ $('exitConfirmOverlay').hidden=true; });
+    try{history.pushState({divarchin:true,view:currentView},'',location.href);}catch{}
+  });
+  $('exitCancelBtn').addEventListener('click',()=>{$('exitConfirmOverlay').hidden=true;onExitConfirm=null;});
+  $('exitYesBtn').addEventListener('click',()=>{
+    $('exitConfirmOverlay').hidden=true;
+    const callback=onExitConfirm;onExitConfirm=null;
+    if(callback)callback();
+  });
   function renderAccount() {
     $('accountStatus').textContent=account?'@'+account.username : accountsEnabled?'مهمان':'حالت مهمان';
     $('accountDescription').textContent=account?'پروفایلت فعال است؛ می‌تونی بازی رنک‌دار بسازی و وارد جدول رتبه‌بندی بشی.':
@@ -46,6 +112,7 @@
     $('accountStats').hidden=!account;
     if(account){$('accountWins').textContent='برد: '+account.wins;$('accountLosses').textContent='باخت: '+account.losses;$('accountRating').textContent='امتیاز: '+account.rating;el.name.value=account.username;el.name.disabled=true;}
     else el.name.disabled=false;
+    updateDashboard();
     $('accountLoginBtn').hidden=!!account;
     $('accountLoginBtn').disabled=!accountsEnabled;
     $('accountLogoutBtn').hidden=!account;
@@ -61,7 +128,7 @@
   }
   function openAuth(type='login') {
     if(!accountsEnabled)return;
-    authMode=type;el.lobby.hidden=true;el.leaderboardScreen.hidden=true;el.accountScreen.hidden=false;
+    authMode=type;navigate('accountScreen');
     el.recoveryCard.hidden=true;el.authForm.hidden=false;
     el.authForm.reset();msg(el.authError,'');
     const texts={login:'ورود به حساب',register:'ساخت حساب جدید',recover:'بازیابی حساب'};
@@ -82,7 +149,7 @@
     const body={username,password};if(authMode==='recover')body.recoveryCode=el.authRecovery.value;
     $('authSubmit').disabled=true;msg(el.authError,'');
     try{
-      const result=await request(path,body);account=result.user;renderAccount();
+      const result=await request(path,body);account=result.user;profileCache=null;renderAccount();
       el.authForm.reset();
       if(result.recoveryCode){
         el.authForm.hidden=true;el.recoveryCard.hidden=false;el.recoveryCode.textContent=result.recoveryCode;
@@ -91,7 +158,7 @@
   }
   function recoveryDone(){el.recoveryCode.textContent='';el.recoveryCard.hidden=true;showLobby();}
   async function openLeaderboard(){
-    el.lobby.hidden=true;el.accountScreen.hidden=true;el.leaderboardScreen.hidden=false;
+    navigate('leaderboardScreen');
     el.rankingItems.replaceChildren();msg(el.rankingError,'');
     try{
       const data=await request('/api/leaderboard');
@@ -109,8 +176,8 @@
   }
   document.querySelectorAll('[data-auth-mode]').forEach(btn=>btn.addEventListener('click',()=>openAuth(btn.dataset.authMode)));
   $('accountLoginBtn').addEventListener('click',()=>openAuth());
-  $('authBackBtn').addEventListener('click',showLobby);
-  $('leaderboardBackBtn').addEventListener('click',showLobby);
+  $('authBackBtn').addEventListener('click',()=>navigate('profileScreen'));
+  $('leaderboardBackBtn').addEventListener('click',()=>navigate('dashboardScreen'));
   $('leaderboardBtn').addEventListener('click',openLeaderboard);
   el.authForm.addEventListener('submit',submitAuth);
   $('recoveryDoneBtn').addEventListener('click',recoveryDone);
@@ -119,8 +186,72 @@
     catch{msg(el.authError,'کپی نشد؛ کد رو به صورت دستی یادداشت کن.');}
   });
   $('accountLogoutBtn').addEventListener('click',async()=>{
-    try {await request('/api/account/logout',{});account=null;renderAccount();}
+    try {await request('/api/account/logout',{});account=null;profileCache=null;renderAccount();}
     catch(e){msg($('accountError'),e.message);}
+  });
+  async function openProfile(){
+    navigate('profileScreen');
+    msg($('profileError'),'');
+    $('profileDashboard').hidden=!account;
+    if(!account){$('profileHistoryBtn').hidden=true;return;}
+    $('profileHistoryBtn').hidden=false;
+    try {
+      const {profile}=await request('/api/account/profile');
+      if(!account || profile.id!==account.id)return;
+      profileCache=profile;
+      $('profileDashboard').hidden=false;
+      $('profileName').textContent='@'+profile.username;
+      $('profileRank').textContent=profile.rank?'رتبه #'+profile.rank.toLocaleString('fa-IR'):'بدون رتبه';
+      $('profileTotal').textContent=profile.total.toLocaleString('fa-IR');
+      $('profileWinRate').textContent=profile.winRate.toLocaleString('fa-IR')+'٪';
+      $('profileBestStreak').textContent=profile.bestStreak.toLocaleString('fa-IR');
+      $('profileCurrentStreak').textContent=profile.currentStreak.toLocaleString('fa-IR');
+    }catch(e){msg($('profileError'),e.message);}
+  }
+  async function openHistory(){
+    navigate('historyScreen');
+    msg($('historyError'),'');
+    const list=$('historyItems');list.replaceChildren();
+    if(!account){list.textContent='برای دیدن تاریخچه مسابقات باید ثبت‌نام یا وارد حساب بشی.';return;}
+    try {
+      if(!profileCache || profileCache.id!==account.id){const response=await request('/api/account/profile');profileCache=response.profile;}
+      if(!profileCache.history.length){list.textContent='هنوز مسابقه رنک‌داری انجام ندادی.';return;}
+      for(const entry of profileCache.history){
+        const row=document.createElement('div');row.className='history-row';
+        const result=document.createElement('b');result.className=entry.won?'history-win':'history-lose';result.textContent=entry.won?'پیروزی':'شکست';
+        const detail=document.createElement('span');detail.textContent='حریف: '+entry.opponent;
+        const stamp=document.createElement('small');stamp.textContent=new Date(entry.at).toLocaleDateString('fa-IR');
+        row.append(result,detail,stamp);list.append(row);
+      }
+    }catch(e){msg($('historyError'),e.message);}
+  }
+  $('splashEnterBtn').addEventListener('click',()=>navigate('dashboardScreen'));
+  $('dashboardPlayBtn').addEventListener('click',()=>navigate('lobby'));
+  $('dashboardBotBtn').addEventListener('click',()=>navigate('botSetupScreen'));
+  $('dashboardProfileBtn').addEventListener('click',openProfile);
+  $('dashboardHistoryBtn').addEventListener('click',openHistory);
+  $('dashboardRankingBtn').addEventListener('click',openLeaderboard);
+  $('dashboardSettingsBtn').addEventListener('click',()=>navigate('settingsScreen'));
+  $('dashboardResumeBtn').addEventListener('click',()=>{if(state)navigate('game');});
+  $('lobbyBackBtn').addEventListener('click',()=>navigate('dashboardScreen'));
+  $('botBackBtn').addEventListener('click',()=>navigate('dashboardScreen'));
+  $('profileBackBtn').addEventListener('click',()=>navigate('dashboardScreen'));
+  $('profileHistoryBtn').addEventListener('click',openHistory);
+  $('historyBackBtn').addEventListener('click',()=>handleBack());
+  $('settingsBackBtn').addEventListener('click',()=>navigate('dashboardScreen'));
+  const motionSetting=localStorage.getItem('divarchin-low-motion')==='yes';
+  $('motionToggle').checked=motionSetting;
+  document.body.classList.toggle('low-motion',motionSetting);
+  $('motionToggle').addEventListener('change',ev=>{
+    localStorage.setItem('divarchin-low-motion',ev.target.checked?'yes':'no');
+    document.body.classList.toggle('low-motion',ev.target.checked);
+  });
+  $('botStartBtn').addEventListener('click',async()=>{
+    const button=$('botStartBtn');button.disabled=true;msg($('botError'),'');
+    try{
+      const data=await request('/api/bot/create',{name:name(),difficulty:$('botDifficulty').value,durationSeconds:Number($('botDuration').value),hostColor:$('botColor').value});
+      setSession(data);
+    }catch(e){msg($('botError'),e.message);}finally{button.disabled=false;}
   });
   async function request(endpoint, body=null) {
     const options=body===null?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)};
@@ -150,7 +281,7 @@
     if (prior && prior.room===next.room && prior.moveNumber<=next.moveNumber) animatePawns(prior.pawns,next.pawns);
     clockReceivedAt=performance.now();
     lastMoveNumber=next.moveNumber;
-    if (next.ratedRecorded && (!prior || !prior.ratedRecorded || prior.room!==next.room)) void refreshAccount();
+    if (next.ratedRecorded && (!prior || !prior.ratedRecorded || prior.room!==next.room)) {profileCache=null;void refreshAccount();}
     render();
     renderChat();
   }
@@ -159,8 +290,8 @@
     sessionStorage.setItem('divarchin-'+room,secret);
     sessionStorage.setItem('divarchin-last',room);
     const url=new URL(location.href);url.searchParams.set('room',room);
-    history.replaceState(null,'',url);
-    chatOpen=false;el.chatScreen.hidden=true;el.lobby.hidden=true;el.game.hidden=false;
+    try{history.replaceState(null,'',url);}catch{}
+    chatOpen=false;navigate('game');
     el.gameCode.textContent=room;
     el.winnerOverlay.hidden=true;
     msg(el.lobbyError,'');
@@ -227,7 +358,8 @@
       $('player'+id).style.setProperty('--piece-color',colorOf(id));
       $('player'+id).classList.toggle('active',!state.waiting && state.winner===null && state.turn===id);
     }
-    $('gameTypeLabel').textContent=state.settings.ranked?'🏆 مسابقه رنک‌دار • دو حساب ثبت‌شده':'نبرد دوستانه • اتاق خصوصی';
+    $('gameTypeLabel').textContent=state.bot?'🤖 تمرین با ربات • بدون امتیاز رنکینگ':state.settings.ranked?'🏆 مسابقه رنک‌دار • دو حساب ثبت‌شده':'نبرد دوستانه • اتاق خصوصی';
+    $('inviteCard').hidden=!!state.bot; $('chatPromo').hidden=!!state.bot; $('openChatBtn').hidden=!!state.bot;
     const duration=state.settings.durationSeconds;
     el.gameDuration.textContent=duration===0?'∞ زمان نامحدود':`${duration===60?'۱':'۳'} دقیقه برای هر نفر`;
     $('goal0').textContent=`↑ هدف ${colorName[state.players[0].color]}`;
@@ -243,7 +375,7 @@
     if(state.remaining[state.you]===0 && isWallMode()) {mode='move';hover=null;selectedWall=null;}
     updateModeButtons();
     renderPreviewControls();
-    el.winnerOverlay.hidden=state.winner===null;
+    el.winnerOverlay.hidden=state.winner===null || currentView!=='game';
     if(state.winner!==null) {
       const waitingRematch=(state.rematchVotes||[]).includes(state.you);
       el.rematch.disabled=waitingRematch;
@@ -459,16 +591,16 @@
     updateModeButtons();renderPreviewControls();draw();
   }));
   function openChat() {
-    if (!state) return;
+    if (!state || state.bot) return;
     chatOpen=true;
     seenChatId=Math.max(0,...(state.chat||[]).map(x=>x.id));
-    el.game.hidden=true;el.chatScreen.hidden=false;
+    navigate('chatScreen');
     el.chatRoomCode.textContent=room;
     renderChat();updateClocks();
     window.scrollTo(0,0);
   }
   function closeChat() {
-    chatOpen=false;el.chatScreen.hidden=true;el.game.hidden=false;
+    chatOpen=false;navigate('game',false);
     renderChat();window.scrollTo(0,0);
   }
   function renderChat() {
@@ -539,22 +671,12 @@
     try {const result=await request('/api/restart',{room,token:secret});msg(el.gameError,'');if(result.pending)el.rematch.textContent='منتظر تأیید حریف...';}
     catch(err){msg(el.gameError,err.message);}finally{el.rematch.disabled=false;}
   });
-  el.newRoom.addEventListener('click',()=>{
-    if(stream)stream.close();stream=null;
-    room='';secret='';state=null;mode='move';hover=null;selectedWall=null;lastMoveNumber=-1;
-    chatOpen=false;seenChatId=0;currentChatRoom='';animation=null;
-    if(animationFrame)cancelAnimationFrame(animationFrame);animationFrame=0;
-    el.chatMessages.dataset.lastId='';el.chatScreen.hidden=true;
-    sessionStorage.removeItem('divarchin-last');
-    history.replaceState(null,'',location.pathname);
-    el.lobby.hidden=false;el.game.hidden=true;el.winnerOverlay.hidden=true;
-    msg(el.gameError,'');el.inviteNote.textContent='';void refreshAccount();
-    window.scrollTo({top:0,behavior:'smooth'});
-  });
+  el.newRoom.addEventListener('click',()=>handleBack());
+  $('winnerHomeBtn').addEventListener('click',()=>{if(state?.winner!==null)leaveRoom();else handleBack();});
   async function init() {
     await refreshAccount();
     const code=(new URL(location.href)).searchParams.get('room')||sessionStorage.getItem('divarchin-last');
-    if(!code) {draw();return;}
+    if(!code) {navigate(window.matchMedia('(max-width: 680px)').matches?'splashScreen':'dashboardScreen',false);draw();return;}
     const normalized=code.toUpperCase();el.roomInput.value=normalized;
     const saved=sessionStorage.getItem('divarchin-'+normalized);
     if(saved) {
@@ -563,7 +685,7 @@
         setSession({room:normalized,token:saved,state:data.state});return;
       } catch {sessionStorage.removeItem('divarchin-'+normalized);sessionStorage.removeItem('divarchin-last');}
     }
-    draw();
+    navigate('lobby',false);draw();
   }
   init();
 })();

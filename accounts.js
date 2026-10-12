@@ -142,6 +142,29 @@ async function leaderboard(){
   const {rows}=await pool.query(`SELECT id,username,rating,wins,losses FROM divarchin_users WHERE wins+losses>0 ORDER BY rating DESC,wins DESC,id ASC LIMIT 50`);
   return rows.map(publicUser);
 }
+async function profile(req){
+  checkEnabled();
+  const user=await getUser(req);
+  if(!user)throw AppError(401,'برای مشاهده پروفایل باید وارد حساب خودت شوی.');
+  // Only query results produced by the server's ranked-match transaction.
+  const {rows}=await pool.query(`
+    SELECT m.id,m.played_at,m.reason,m.duration_seconds,m.winner,
+      CASE WHEN m.player0=$1 THEN p1.username ELSE p0.username END AS opponent
+    FROM divarchin_matches m
+    JOIN divarchin_users p0 ON p0.id=m.player0
+    JOIN divarchin_users p1 ON p1.id=m.player1
+    WHERE m.player0=$1 OR m.player1=$1
+    ORDER BY m.played_at DESC,m.id DESC`,[user.id]);
+  let streak=0,bestStreak=0;
+  for (let i=rows.length-1;i>=0;i--) {
+    streak=rows[i].winner===user.id ? streak+1:0;
+    bestStreak=Math.max(bestStreak,streak);
+  }
+  const total=user.wins+user.losses;
+  const history=rows.slice(0,30).map(row=>({id:row.id,at:row.played_at,opponent:row.opponent,won:row.winner===user.id,reason:row.reason,durationSeconds:row.duration_seconds}));
+  const above=await pool.query(`SELECT COUNT(*)::int AS n FROM divarchin_users WHERE wins+losses>0 AND (rating>$1 OR (rating=$1 AND wins>$2))`,[user.rating,user.wins]);
+  return {...user,total,winRate:total?Math.round(user.wins*1000/total)/10:0,currentStreak:streak,bestStreak,rank:total?above.rows[0].n+1:null,history};
+}
 async function saveRankedMatch(match){
   checkEnabled();
   const client=await pool.connect();
@@ -165,4 +188,4 @@ async function saveRankedMatch(match){
   }catch(e){await client.query('ROLLBACK');throw e;}
   finally{client.release();}
 }
-module.exports={enabled,getUser,register,login,recover,logout,leaderboard,saveRankedMatch,AppError,validUsername,validPassword,normalizeRecoveryCode,hashPassword,verifyPassword,digest,recoveryCode};
+module.exports={enabled,getUser,register,login,recover,logout,leaderboard,profile,saveRankedMatch,AppError,validUsername,validPassword,normalizeRecoveryCode,hashPassword,verifyPassword,digest,recoveryCode};

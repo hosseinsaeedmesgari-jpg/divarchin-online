@@ -1,11 +1,11 @@
 {
   "name": "divarchin-online",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "private": true,
-  "description": "Divarchin online multiplayer board game with optional accounts and ranking",
+  "description": "Divarchin multiplayer board game with optional accounts, leaderboard, bot opponent and mobile dashboard",
   "scripts": {
     "start": "node server.js",
-    "test": "node test_clock.js && node test_game.js && node test_realtime.js && node test_accounts.js && node test_accounts_db.js"
+    "test": "node test_clock.js && node test_game.js && node test_realtime.js && node test_accounts.js && node test_accounts_db.js && node test_bot.js"
   },
   "engines": {
     "node": ">=18"

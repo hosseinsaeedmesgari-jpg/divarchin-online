@@ -2,6 +2,7 @@ package com.divarchin.online;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
@@ -145,10 +146,22 @@ public class MainActivity extends Activity {
         }
         return super.onOptionsItemSelected(item);
     }
+    // Browser WebView navigation history is not the same as the game's SPA views.
+    // Let JavaScript handle in-game Back; ask for confirmation only at the home screen.
+    private void confirmExit() {
+        new AlertDialog.Builder(this)
+            .setTitle("خروج از دیوارچین")
+            .setMessage("تمایل به خروج از بازی دارید؟")
+            .setNegativeButton("خیر", (dialog, which) -> dialog.dismiss())
+            .setPositiveButton("بله، خروج", (dialog, which) -> finish())
+            .show();
+    }
     @Override public void onBackPressed() {
-        if (offlineView.getVisibility() == View.VISIBLE) { reload(); return; }
-        if (webView.canGoBack()) webView.goBack();
-        else super.onBackPressed();
+        if (offlineView.getVisibility() == View.VISIBLE) { confirmExit(); return; }
+        webView.evaluateJavascript(
+            "window.divarchinHandleBack ? window.divarchinHandleBack() : 'exit'",
+            result -> { if (result == null || result.contains("exit") || result.equals("null")) confirmExit(); }
+        );
     }
     @Override protected void onSaveInstanceState(Bundle out) {
         webView.saveState(out);

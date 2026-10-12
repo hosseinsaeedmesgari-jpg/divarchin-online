@@ -25,10 +25,34 @@
       <span class="live-pill"><span class="live-dot"></span> رقابت آنلاین دونفره</span>
     </header>
 
-    <section id="lobby" class="lobby-card" aria-label="ساخت یا ورود به اتاق">
-      <div class="mini-tag">WALLS • STRATEGY • 1V1</div>
-      <h1>یه حرکت،<br><em>هزار تا راه!</em></h1>
-      <p class="intro">راهت رو پیدا کن، جلوی دوستت دیوار بذار و زودتر به طرف مقابل برس. همه‌چی از توی مرورگر گوشی.</p>
+    <section id="splashScreen" class="splash-screen" hidden aria-label="شروع دیوارچین">
+      <div class="splash-stars" aria-hidden="true">✦ ✧ ✦</div>
+      <div class="splash-title"><span>دیوارچین</span><small>فکر کن • راه بساز • حریفت رو متوقف کن</small></div>
+      <div class="splash-visual" aria-hidden="true"><img src="/splash-art.webp" alt="" width="690" height="588"><span class="splash-spark spark-one">✦</span><span class="splash-spark spark-two">✦</span></div>
+      <button id="splashEnterBtn" class="btn primary wide splash-enter" type="button">ورود به بازی ←</button>
+      <p class="splash-note">آنلاین با دوستانت یا تمرین با ربات</p>
+    </section>
+
+    <section id="dashboardScreen" class="hub-page" hidden aria-label="داشبورد دیوارچین">
+      <div class="hub-welcome"><div><span class="mini-tag">خانه بازیکن</span><h1 id="dashGreeting">به دیوارچین خوش اومدی!</h1><p id="dashCaption">یک نبرد تازه در انتظارته.</p></div><span class="hub-avatar" aria-hidden="true">♟</span></div>
+      <div class="hub-hero"><div class="hub-hero-text"><span class="mini-tag">نبرد آنلاین • بازی دوستانه و رنک‌دار</span><h2>فکر کن، راه بساز، پیروز شو</h2><p>رقیبت رو به چالش بکش؛ صفحه‌ی بازی برای شروع آماده‌ست.</p><button id="dashboardPlayBtn" class="btn primary wide" type="button">⚔️ شروع بازی آنلاین ←</button></div><div class="hub-art" role="img" aria-label="مهره‌های فیروزه‌ای و نارنجی روی صفحه چوبی"></div></div>
+      <div class="hub-actions"><button id="dashboardBotBtn" class="hub-action" type="button"><span>🤖</span><b>بازی با ربات</b><small>تمرین در ۳ سطح</small></button><button id="dashboardResumeBtn" class="hub-action" type="button" hidden><span>▶</span><b>ادامه مسابقه</b><small>بازگشت به اتاق فعال</small></button></div>
+      <nav class="hub-nav" aria-label="بخش‌های داشبورد"><button id="dashboardProfileBtn" type="button"><span>👤</span><b>پروفایل</b></button><button id="dashboardRankingBtn" type="button"><span>🏆</span><b>رتبه‌بندی</b></button><button id="dashboardHistoryBtn" type="button"><span>◷</span><b>تاریخچه</b></button><button id="dashboardSettingsBtn" type="button"><span>⚙️</span><b>تنظیمات</b></button></nav>
+      <p id="dashboardGuestTip" class="hub-tip">به‌عنوان مهمان هم می‌تونی بازی کنی؛ برای شرکت در رنکینگ ثبت‌نام کن.</p>
+    </section>
+
+    <section id="botSetupScreen" class="auth-page" hidden aria-label="تنظیم تمرین با ربات">
+      <button id="botBackBtn" class="btn ghost nav-back" type="button">→ بازگشت به داشبورد</button>
+      <div class="auth-card"><span class="mini-tag">تمرین آزاد • بدون امتیاز رنکینگ</span><h2>🤖 بازی با ربات</h2><p>ربات روی سرور بازی می‌کنه و مثل بازیکن واقعی دیوار می‌ذاره و حرکت می‌کنه.</p>
+      <label for="botDifficulty">درجه سختی</label><select id="botDifficulty" class="bot-select"><option value="easy">آسان — برای یادگیری</option><option value="medium" selected>متوسط — رقابت دوستانه</option><option value="hard">سخت — چالش بیشتر</option></select>
+      <label for="botDuration">زمان هر طرف</label><select id="botDuration" class="bot-select"><option value="0">∞ نامحدود</option><option value="60">۱ دقیقه</option><option value="180" selected>۳ دقیقه</option></select>
+      <label for="botColor">رنگ مهره تو</label><select id="botColor" class="bot-select"><option value="cyan">فیروزه‌ای</option><option value="orange">نارنجی</option></select>
+      <button id="botStartBtn" class="btn primary wide" type="button">شروع تمرین با ربات ←</button><p id="botError" class="error" role="alert" hidden></p></div>
+    </section>
+
+    <section id="profileScreen" class="auth-page" hidden aria-label="پروفایل بازیکن">
+      <button id="profileBackBtn" class="btn ghost nav-back" type="button">→ بازگشت به داشبورد</button>
+      <div class="auth-card"><span class="mini-tag">PLAYER PROFILE</span><h2>👤 پروفایل بازیکن</h2>
       <div class="account-card" aria-label="حساب کاربری">
         <div class="account-label">👤 حساب کاربری <span id="accountStatus">در حال بررسی...</span></div>
         <p id="accountDescription">بدون ثبت‌نام هم می‌تونی بازی دوستانه انجام بدی. برای رنکینگ ثبت‌نام لازمه.</p>
@@ -40,6 +64,21 @@
         </div>
         <p id="accountError" class="error" hidden></p>
       </div>
+
+        <div id="profileDashboard" hidden><div class="profile-rank"><span id="profileName">—</span><b id="profileRank">—</b></div><div class="profile-grid"><div><b id="profileTotal">۰</b><small>کل مسابقات</small></div><div><b id="profileWinRate">۰٪</b><small>درصد برد</small></div><div><b id="profileBestStreak">۰</b><small>بهترین برد پیاپی</small></div><div><b id="profileCurrentStreak">۰</b><small>برد متوالی فعلی</small></div></div><p class="profile-hint">آمار مسابقات رنک‌دار ثبت‌شده در دیتابیس است. بازی با ربات و بازی دوستانه در آن محاسبه نمی‌شوند.</p></div>
+        <div id="profileError" class="error" role="alert" hidden></div>
+        <button id="profileHistoryBtn" class="btn secondary wide" type="button">📜 تاریخچه مسابقات ←</button>
+      </div>
+    </section>
+
+    <section id="historyScreen" class="auth-page" hidden aria-label="تاریخچه مسابقات"><button id="historyBackBtn" class="btn ghost nav-back" type="button">→ بازگشت</button><div class="auth-card"><span class="mini-tag">MATCH HISTORY</span><h2>◷ تاریخچه مسابقات</h2><p>۳۰ مسابقه رنک‌دار اخیر</p><div id="historyItems" class="history-items"></div><p id="historyError" class="error" hidden></p></div></section>
+    <section id="settingsScreen" class="auth-page" hidden aria-label="تنظیمات بازی"><button id="settingsBackBtn" class="btn ghost nav-back" type="button">→ بازگشت به داشبورد</button><div class="auth-card"><span class="mini-tag">GAME SETTINGS</span><h2>⚙️ تنظیمات</h2><label class="switch-row"><input type="checkbox" id="motionToggle"><span>کاهش انیمیشن‌های تزئینی</span></label><p class="profile-hint">تغییر حالت نمایش فقط روی همین دستگاه ذخیره می‌شه. انیمیشن اصلی مهره‌ها برای خوانایی حرکت حفظ شده مگر اینکه کاهش حرکت دستگاه فعال باشه.</p><div class="help-box"><b>قانون دیوارچین</b><p>در هر نوبت یک حرکت یا یک دیوار. هیچ دیواری نباید مسیر رسیدن حریف به هدفش رو کامل ببنده. برای بازی رنک‌دار هر دو بازیکن باید ثبت‌نام کرده باشن.</p></div></div></section>
+
+    <section id="lobby" class="lobby-card" aria-label="ساخت یا ورود به اتاق">
+      <div class="mini-tag">WALLS • STRATEGY • 1V1</div>
+      <h1>یه حرکت،<br><em>هزار تا راه!</em></h1>
+      <p class="intro">راهت رو پیدا کن، جلوی دوستت دیوار بذار و زودتر به طرف مقابل برس. همه‌چی از توی مرورگر گوشی.</p>
+      <button id="lobbyBackBtn" class="btn ghost nav-back" type="button">→ بازگشت به داشبورد</button>
       <div class="field-group">
         <label for="playerName">اسم تو توی بازی</label>
         <input id="playerName" maxlength="18" placeholder="مثلاً: قهرمان دیوارها" autocomplete="nickname">
@@ -147,7 +186,7 @@
         </div>
       </div>
       <aside class="sidebar">
-        <section class="side-card invite-card">
+        <section class="side-card invite-card" id="inviteCard">
           <div class="side-title"><span>🔗</span> دعوت از دوستت</div>
           <p>لینک اتاق رو بفرست تا دوستت مستقیم به بازی وصل بشه.</p>
           <button id="copyLinkBtn" class="btn primary wide">کپی لینک دعوت <span>⧉</span></button>
@@ -164,7 +203,7 @@
           </div>
           <div id="gameError" class="error" role="alert" hidden></div>
         </section>
-        <section class="side-card chat-promo"><div class="side-title"><span>💬</span> گفت‌وگوی خصوصی</div><p>صفحه چت مخصوص همین اتاق؛ پیام‌ها در لحظه برای دوستت فرستاده می‌شن.</p><button id="openChatSideBtn" class="btn secondary wide">باز کردن صفحه چت <span id="chatUnreadSide" class="unread-count" hidden>۰</span></button></section>
+        <section class="side-card chat-promo" id="chatPromo"><div class="side-title"><span>💬</span> گفت‌وگوی خصوصی</div><p>صفحه چت مخصوص همین اتاق؛ پیام‌ها در لحظه برای دوستت فرستاده می‌شن.</p><button id="openChatSideBtn" class="btn secondary wide">باز کردن صفحه چت <span id="chatUnreadSide" class="unread-count" hidden>۰</span></button></section>
         <section class="side-card howto-card"><div class="side-title"><span>💡</span> قانون‌های مهم</div><ul><li>در هر نوبت یا حرکت کن یا دیوار بذار.</li><li>نمی‌تونی راه رسیدن هیچ بازیکنی رو کامل ببندی.</li><li>اگه جلوی مهره حریف باشی، می‌تونی از روش بپری.</li><li>اولین نفر که به لبه مقابل برسه برنده‌ست.</li><li>در بازی زمان‌دار، تمام شدن ساعت یعنی باخت. زیر نصف زمان، حرکتِ حداکثر ۱ ثانیه‌ای ۱ ثانیه پاداش داره.</li><li>روی گوشی برای گذاشتن دیوار اول پیش‌نمایش رو انتخاب کن و بعد «تأیید دیوار» بزن.</li></ul></section>
         <button id="newRoomBtn" class="btn ghost wide">↻ خروج و ساخت اتاق دیگر</button>
       </aside>
@@ -188,7 +227,8 @@
       </div>
     </section>
 
-    <div id="winnerOverlay" class="modal-backdrop" hidden><div class="modal"><div class="trophy">🏆</div><h2 id="winnerTitle">برنده شدی!</h2><p id="winnerText">چه بازی قشنگی!</p><button id="rematchBtn" class="btn primary wide">پیشنهاد بازی مجدد ↻</button></div></div>
+    <div id="exitConfirmOverlay" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="exitConfirmTitle"><div class="modal exit-dialog"><span class="exit-mark">↩</span><h2 id="exitConfirmTitle">تمایل به خروج داری؟</h2><p id="exitConfirmText">آیا می‌خواهی به داشبورد برگردی؟</p><div class="exit-actions"><button id="exitCancelBtn" type="button" class="btn secondary">نه، بمون</button><button id="exitYesBtn" type="button" class="btn exit-danger">بله، خروج</button></div></div></div>
+    <div id="winnerOverlay" class="modal-backdrop" hidden><div class="modal"><div class="trophy">🏆</div><h2 id="winnerTitle">برنده شدی!</h2><p id="winnerText">چه بازی قشنگی!</p><button id="rematchBtn" class="btn primary wide">پیشنهاد بازی مجدد ↻</button><button id="winnerHomeBtn" class="btn ghost wide" type="button">بازگشت به داشبورد</button></div></div>
     <footer>دیوارچین · ساخته‌شده برای رقابت دوستانه ✦</footer>
   </main>
 </body>

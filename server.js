@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const accounts = require('./accounts');
+const bot = require('./bot');
 
 const PORT = Number(process.env.PORT) || 3000;
 const ROOT = path.join(__dirname, 'public');
@@ -115,6 +116,7 @@ function publicState(room, id) {
     room:room.code, you:id,
     players: room.players.map((p,i)=>({id:i,name:p.name,registered:!!p.accountId,side:SIDES[i], color: i === 0 ? room.settings.hostColor : (room.settings.hostColor === 'cyan' ? 'orange' : 'cyan')})),
     settings: room.settings,
+    bot: !!room.bot,
     rematchVotes: room.rematchVotes ? Array.from(room.rematchVotes) : [],
     ratedRecorded: room.ratedRecorded === true,
     chat: room.chat.slice(-CHAT_LIMIT),
@@ -189,23 +191,29 @@ async function api(req,res,url) {
   if (route==='/api/health' && req.method==='GET') return send(res,200,{ok:true,accountsEnabled:accounts.enabled});
   if (route==='/api/account/me' && req.method==='GET') return send(res,200,{enabled:accounts.enabled,user:await accounts.getUser(req)});
   if (route==='/api/leaderboard' && req.method==='GET') return send(res,200,{players:await accounts.leaderboard()});
+  if (route==='/api/account/profile' && req.method==='GET') return send(res,200,{profile:await accounts.profile(req)});
   if (route==='/api/account/register' && req.method==='POST') return send(res,201,await accounts.register(req,res,data));
   if (route==='/api/account/login' && req.method==='POST') return send(res,200,await accounts.login(req,res,data));
   if (route==='/api/account/recover' && req.method==='POST') return send(res,200,await accounts.recover(req,res,data));
   if (route==='/api/account/logout' && req.method==='POST') return send(res,200,await accounts.logout(req,res));
-  if (route==='/api/create' && req.method==='POST') {
+  if ((route==='/api/create' || route==='/api/bot/create') && req.method==='POST') {
     if (rooms.size>=MAX_ROOMS) return fail(res,503,'فعلاً اتاق جدید نمی‌توان ساخت.');
     const code=createRoomCode(), secret=token();
     const durationSeconds = [0,60,180].includes(data.durationSeconds) ? data.durationSeconds : 180;
     const hostColor = data.hostColor === 'orange' ? 'orange' : 'cyan';
-    const ranked=data.ranked===true;
+    const isBot=route==='/api/bot/create';
+    const difficulty=['easy','medium','hard'].includes(data.difficulty)?data.difficulty:'medium';
+    const ranked=!isBot && data.ranked===true;
     const actor=ranked?await accounts.getUser(req):await accounts.getUser(req).catch(()=>null);
     if(ranked && !actor) return fail(res,403,'برای ساخت مسابقه رنک‌دار باید وارد حساب شوی.');
     const settings = { durationSeconds, hostColor, ranked };
-    const room={code,settings,players:[{name:actor?.username||cleanName(data.name),accountId:actor?.id||null,token:secret,listeners:new Set()}],
+    const participants=[{name:actor?.username||cleanName(data.name),accountId:actor?.id||null,token:secret,listeners:new Set()}];
+    if(isBot)participants.push({name:'ربات '+({easy:'آسان',medium:'متوسط',hard:'سخت'}[difficulty]),accountId:null,token:token(),listeners:new Set(),bot:true});
+    const room={code,settings,players:participants,bot:isBot?difficulty:null,
       game:initialState(durationSeconds),matchId:crypto.randomUUID(),ratedRecorded:false,recording:false,rematchVotes:new Set(),
       lastActivity:Date.now(),chat:[],chatCounter:0};
     rooms.set(code,room);
+    if(isBot)room.game.time.turnStartedAt=Date.now();
     return send(res,201,{room:code,token:secret,state:publicState(room,0)});
   }
   if (route==='/api/join' && req.method==='POST') {
@@ -240,6 +248,7 @@ async function api(req,res,url) {
     return;
   }
   if (route==='/api/chat' && req.method==='POST') {
+    if (room.bot) return fail(res,409,'چت برای بازی با ربات فعال نیست.');
     if (room.players.length !== 2) return fail(res,409,'چت پس از ورود بازیکن دوم فعال می‌شود.');
     const message = typeof data.message === 'string' ? data.message.trim() : '';
     if (!message || message.length > MAX_CHAT_LENGTH || /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(message)) {
@@ -257,6 +266,11 @@ async function api(req,res,url) {
   if (route==='/api/restart' && req.method==='POST') {
     if (room.players.length<2) return fail(res,409,'بازیکن دوم هنوز نرسیده.');
     if (s.winner===null) return fail(res,409,'بازی هنوز تمام نشده.');
+    if (room.bot) {
+      room.game=initialState(room.settings.durationSeconds);room.game.time.turnStartedAt=Date.now();
+      room.matchId=crypto.randomUUID();room.rematchVotes.clear();publish(room);
+      return send(res,200,{ok:true});
+    }
     if(room.settings.ranked){
       const user=await accounts.getUser(req);
       if(!user || user.id!==room.players[id].accountId) return fail(res,401,'برای ادامه مسابقه رنک‌دار وارد حساب خودت شو.');
@@ -299,9 +313,32 @@ async function api(req,res,url) {
       s.time.turnStartedAt=null;
     }
     publish(room);
+    if (room.bot && s.winner===null && s.turn===1) queueBot(room);
     return send(res,200,{ok:true});
   }
   return fail(res,404,'مسیر پیدا نشد.');
+}
+function queueBot(room) {
+  if(!room.bot || room.botPending)return;
+  room.botPending=true;
+  setTimeout(()=>{
+    room.botPending=false;
+    const s=room.game;
+    if(s.winner!==null || s.turn!==1 || expireIfNeeded(room)) {publish(room);return;}
+    try {
+      const action=bot.chooseAction(s,room.bot,{legalMoves,legalWall,hasWallBlock});
+      if(action.type==='move') {
+        s.pawns[1]={r:action.r,c:action.c};
+        if(action.r===8){s.winner=1;s.endReason='goal';}
+      }else if(action.type==='wall' && s.remaining[1]>0 && legalWall(s,action.o,action.r,action.c)) {
+        s.walls.push({o:action.o,r:action.r,c:action.c,owner:1});s.remaining[1]--;
+      }else throw new Error('Bot action invalid');
+      const now=Date.now();settleTurnClock(s,1,now);
+      if(s.winner===null){s.turn=0;s.moveNumber++;s.time.turnStartedAt=now;}
+      else s.time.turnStartedAt=null;
+      publish(room);
+    }catch(err){console.error('Bot turn error:',err);}
+  },room.bot==='easy'?650:room.bot==='hard'?520:580).unref?.();
 }
 function serveStatic(req,res,url) {
   if (req.method!=='GET'&&req.method!=='HEAD') return fail(res,405,'روش درخواست مجاز نیست.');
@@ -312,7 +349,7 @@ function serveStatic(req,res,url) {
   fs.stat(file,(err,stat)=>{
     if (err||!stat.isFile()) return fail(res,404,'صفحه پیدا نشد.');
     const ext=path.extname(file);
-    const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json'};
+    const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webp':'image/webp','.webmanifest':'application/manifest+json'};
     res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'});
     if (req.method==='HEAD') return res.end();
     fs.createReadStream(file).pipe(res);
