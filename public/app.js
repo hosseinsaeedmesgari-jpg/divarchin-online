@@ -12,12 +12,18 @@
     confirmWall:$('confirmWallBtn'),cancelWall:$('cancelWallBtn'),
     chatScreen:$('chatScreen'),chatMessages:$('chatMessages'),chatInput:$('chatInput'),chatForm:$('chatForm'),chatError:$('chatError'),chatCount:$('chatCharCount'),
     backToGame:$('backToGameBtn'),chatRoomCode:$('chatRoomCode'),chatClockNotice:$('chatClockNotice'),
-    chatUnread:$('chatUnread'),chatUnreadSide:$('chatUnreadSide'),sendChat:$('sendChatBtn')
+    chatUnread:$('chatUnread'),chatUnreadSide:$('chatUnreadSide'),sendChat:$('sendChatBtn'),
+    accountScreen:$('accountScreen'),leaderboardScreen:$('leaderboardScreen'),
+    authForm:$('authForm'),authError:$('authError'),authTitle:$('authTitle'),
+    authUsername:$('authUsername'),authPassword:$('authPassword'),authRepeat:$('authRepeat'),authRecovery:$('authRecovery'),
+    recoveryCard:$('recoveryCodeCard'),recoveryCode:$('newRecoveryCode'),
+    rankingItems:$('leaderboardItems'),rankingError:$('leaderboardError')
   };
   let room='', secret='', state=null, stream=null, mode='move', hover=null, selectedWall=null;
   let sending=false, pointerKind='mouse', touchingWall=false, clockReceivedAt=0, lastMoveNumber=-1;
   let chatOpen=false, seenChatId=0, chatSending=false, currentChatRoom='';
   let animation=null, animationFrame=0;
+  let account=null, accountsEnabled=false, authMode='login';
   const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const ctx=el.board.getContext('2d');
   const W=600, H=600, CELL=50, GAP=10, STEP=CELL+GAP, ORIGIN=(W-(9*CELL+8*GAP))/2;
@@ -28,6 +34,94 @@
   function msg(node,message) {node.textContent=message;node.hidden=!message;}
   function name() {return el.name.value.trim().slice(0,18)||'بازیکن';}
   function setBusy(b) {el.create.disabled=b;el.join.disabled=b;}
+  function showLobby() {
+    el.accountScreen.hidden=true;el.leaderboardScreen.hidden=true;
+    if(!state)el.lobby.hidden=false;
+  }
+  function renderAccount() {
+    $('accountStatus').textContent=account?'@'+account.username : accountsEnabled?'مهمان':'حالت مهمان';
+    $('accountDescription').textContent=account?'پروفایلت فعال است؛ می‌تونی بازی رنک‌دار بسازی و وارد جدول رتبه‌بندی بشی.':
+      accountsEnabled?'بدون ثبت‌نام می‌تونی بازی دوستانه انجام بدی. برای حضور در رنکینگ باید ثبت‌نام کنی.':
+        'بازی مهمان فعاله. برای ثبت‌نام و رنکینگ ابتدا باید دیتابیس توسط مدیر بازی تنظیم بشه.';
+    $('accountStats').hidden=!account;
+    if(account){$('accountWins').textContent='برد: '+account.wins;$('accountLosses').textContent='باخت: '+account.losses;$('accountRating').textContent='امتیاز: '+account.rating;el.name.value=account.username;el.name.disabled=true;}
+    else el.name.disabled=false;
+    $('accountLoginBtn').hidden=!!account;
+    $('accountLoginBtn').disabled=!accountsEnabled;
+    $('accountLogoutBtn').hidden=!account;
+    document.querySelectorAll('input[name="gameType"][value="ranked"]').forEach(x=>{
+      x.disabled=!account;
+      if(!account && x.checked)document.querySelector('input[name="gameType"][value="friendly"]').checked=true;
+    });
+  }
+  async function refreshAccount() {
+    try {const result=await request('/api/account/me');account=result.user;accountsEnabled=result.enabled;msg($('accountError'),'');}
+    catch(e){account=null;accountsEnabled=false;msg($('accountError'),'اتصال به حساب کاربری برقرار نشد. بازی مهمان همچنان قابل استفاده است.');}
+    renderAccount();
+  }
+  function openAuth(type='login') {
+    if(!accountsEnabled)return;
+    authMode=type;el.lobby.hidden=true;el.leaderboardScreen.hidden=true;el.accountScreen.hidden=false;
+    el.recoveryCard.hidden=true;el.authForm.hidden=false;
+    el.authForm.reset();msg(el.authError,'');
+    const texts={login:'ورود به حساب',register:'ساخت حساب جدید',recover:'بازیابی حساب'};
+    el.authTitle.textContent=texts[type];
+    $('authRepeatField').hidden=type!=='register';$('authRecoveryField').hidden=type!=='recover';
+    el.authRepeat.required=type==='register';el.authRecovery.required=type==='recover';
+    $('authPasswordLabel').textContent=type==='recover'?'رمز عبور جدید':'رمز عبور';
+    el.authPassword.autocomplete=type==='login'?'current-password':'new-password';
+    $('authSubmit').textContent=type==='register'?'ثبت‌نام':type==='recover'?'تغییر رمز عبور':'ورود';
+    document.querySelectorAll('[data-auth-mode]').forEach(btn=>btn.className='btn '+(btn.dataset.authMode===type?'secondary':'ghost'));
+    window.scrollTo(0,0);
+  }
+  async function submitAuth(ev){
+    ev.preventDefault();
+    const username=el.authUsername.value.trim(),password=el.authPassword.value;
+    if(authMode==='register' && password!==el.authRepeat.value){msg(el.authError,'تکرار رمز عبور مطابقت نداره.');return;}
+    const path={login:'/api/account/login',register:'/api/account/register',recover:'/api/account/recover'}[authMode];
+    const body={username,password};if(authMode==='recover')body.recoveryCode=el.authRecovery.value;
+    $('authSubmit').disabled=true;msg(el.authError,'');
+    try{
+      const result=await request(path,body);account=result.user;renderAccount();
+      el.authForm.reset();
+      if(result.recoveryCode){
+        el.authForm.hidden=true;el.recoveryCard.hidden=false;el.recoveryCode.textContent=result.recoveryCode;
+      }else showLobby();
+    }catch(e){msg(el.authError,e.message);}finally{$('authSubmit').disabled=false;}
+  }
+  function recoveryDone(){el.recoveryCode.textContent='';el.recoveryCard.hidden=true;showLobby();}
+  async function openLeaderboard(){
+    el.lobby.hidden=true;el.accountScreen.hidden=true;el.leaderboardScreen.hidden=false;
+    el.rankingItems.replaceChildren();msg(el.rankingError,'');
+    try{
+      const data=await request('/api/leaderboard');
+      if(!data.players.length){const p=document.createElement('p');p.textContent='هنوز مسابقه رنک‌داری ثبت نشده؛ اولین نفر باش!';el.rankingItems.append(p);}
+      data.players.forEach((u,i)=>{
+        const row=document.createElement('div');row.className='rank-row';
+        const place=document.createElement('span');place.className='rank-place';place.textContent='#'+(i+1);
+        const uname=document.createElement('span');uname.className='rank-name';uname.textContent=u.username;
+        const score=document.createElement('span');score.className='rank-score';score.textContent=u.rating+' امتیاز';
+        const info=document.createElement('span');info.className='rank-details';info.textContent=`${u.wins} برد • ${u.losses} باخت`;
+        row.append(place,uname,score,info);el.rankingItems.append(row);
+      });
+    }catch(e){msg(el.rankingError,e.message);}
+    window.scrollTo(0,0);
+  }
+  document.querySelectorAll('[data-auth-mode]').forEach(btn=>btn.addEventListener('click',()=>openAuth(btn.dataset.authMode)));
+  $('accountLoginBtn').addEventListener('click',()=>openAuth());
+  $('authBackBtn').addEventListener('click',showLobby);
+  $('leaderboardBackBtn').addEventListener('click',showLobby);
+  $('leaderboardBtn').addEventListener('click',openLeaderboard);
+  el.authForm.addEventListener('submit',submitAuth);
+  $('recoveryDoneBtn').addEventListener('click',recoveryDone);
+  $('copyRecoveryBtn').addEventListener('click',async()=>{
+    try{await navigator.clipboard.writeText(el.recoveryCode.textContent);$('copyRecoveryBtn').textContent='کپی شد ✓';}
+    catch{msg(el.authError,'کپی نشد؛ کد رو به صورت دستی یادداشت کن.');}
+  });
+  $('accountLogoutBtn').addEventListener('click',async()=>{
+    try {await request('/api/account/logout',{});account=null;renderAccount();}
+    catch(e){msg($('accountError'),e.message);}
+  });
   async function request(endpoint, body=null) {
     const options=body===null?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)};
     let response;
@@ -56,6 +150,7 @@
     if (prior && prior.room===next.room && prior.moveNumber<=next.moveNumber) animatePawns(prior.pawns,next.pawns);
     clockReceivedAt=performance.now();
     lastMoveNumber=next.moveNumber;
+    if (next.ratedRecorded && (!prior || !prior.ratedRecorded || prior.room!==next.room)) void refreshAccount();
     render();
     renderChat();
   }
@@ -92,7 +187,8 @@
     msg(el.lobbyError,'');setBusy(true);
     const durationSeconds=Number(document.querySelector('input[name="duration"]:checked').value);
     const hostColor=document.querySelector('input[name="hostColor"]:checked').value;
-    try {setSession(await request('/api/create',{name:name(),durationSeconds,hostColor}));}
+    const ranked=document.querySelector('input[name="gameType"]:checked').value==='ranked';
+    try {setSession(await request('/api/create',{name:name(),durationSeconds,hostColor,ranked}));}
     catch(err) {msg(el.lobbyError,err.message);} finally {setBusy(false);}
   }
   async function join() {
@@ -122,7 +218,7 @@
   function render() {
     if(!state) return;
     state.players.forEach((p,id)=>{
-      $(id===0?'player0Name':'player1Name').textContent=p.name+(id===state.you?' (تو)':'');
+      $(id===0?'player0Name':'player1Name').textContent=p.name+(p.registered?' ✓':'')+(id===state.you?' (تو)':'');
     });
     if(state.players.length<2) $('player1Name').textContent='منتظر دوستت...';
     $('player0Walls').textContent=state.remaining[0]+' 🧱';
@@ -131,6 +227,7 @@
       $('player'+id).style.setProperty('--piece-color',colorOf(id));
       $('player'+id).classList.toggle('active',!state.waiting && state.winner===null && state.turn===id);
     }
+    $('gameTypeLabel').textContent=state.settings.ranked?'🏆 مسابقه رنک‌دار • دو حساب ثبت‌شده':'نبرد دوستانه • اتاق خصوصی';
     const duration=state.settings.durationSeconds;
     el.gameDuration.textContent=duration===0?'∞ زمان نامحدود':`${duration===60?'۱':'۳'} دقیقه برای هر نفر`;
     $('goal0').textContent=`↑ هدف ${colorName[state.players[0].color]}`;
@@ -148,11 +245,15 @@
     renderPreviewControls();
     el.winnerOverlay.hidden=state.winner===null;
     if(state.winner!==null) {
+      const waitingRematch=(state.rematchVotes||[]).includes(state.you);
+      el.rematch.disabled=waitingRematch;
+      el.rematch.textContent=waitingRematch?'منتظر تأیید حریف...':'پیشنهاد بازی مجدد ↻';
       const win=state.winner===state.you;
       el.winnerTitle.textContent=win?'بردی! آفرین 🎉':'این دفعه دوستت برد!';
       el.winnerText.textContent=state.endReason==='timeout' ?
         (win?'زمان دوستت به صفر رسید.':'زمان تو به صفر رسید.') :
         (win?'زودتر از حریفت به اون طرف صفحه رسیدی.':'یه دست دیگه بازی کن و جبران کن!');
+      if(state.settings.ranked) el.winnerText.textContent += state.ratedRecorded?' • نتیجه در رنکینگ ثبت شد.':' • در حال ثبت نتیجه رنک‌دار...';
     }
     draw();
     updateClocks();
@@ -435,7 +536,7 @@
   el.roomInput.addEventListener('keydown',ev=>{if(ev.key==='Enter')join();});
   el.rematch.addEventListener('click',async()=>{
     el.rematch.disabled=true;
-    try {await request('/api/restart',{room,token:secret});msg(el.gameError,'');}
+    try {const result=await request('/api/restart',{room,token:secret});msg(el.gameError,'');if(result.pending)el.rematch.textContent='منتظر تأیید حریف...';}
     catch(err){msg(el.gameError,err.message);}finally{el.rematch.disabled=false;}
   });
   el.newRoom.addEventListener('click',()=>{
@@ -447,10 +548,11 @@
     sessionStorage.removeItem('divarchin-last');
     history.replaceState(null,'',location.pathname);
     el.lobby.hidden=false;el.game.hidden=true;el.winnerOverlay.hidden=true;
-    msg(el.gameError,'');el.inviteNote.textContent='';
+    msg(el.gameError,'');el.inviteNote.textContent='';void refreshAccount();
     window.scrollTo({top:0,behavior:'smooth'});
   });
   async function init() {
+    await refreshAccount();
     const code=(new URL(location.href)).searchParams.get('room')||sessionStorage.getItem('divarchin-last');
     if(!code) {draw();return;}
     const normalized=code.toUpperCase();el.roomInput.value=normalized;

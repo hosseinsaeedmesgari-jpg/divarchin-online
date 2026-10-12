@@ -29,6 +29,17 @@
       <div class="mini-tag">WALLS • STRATEGY • 1V1</div>
       <h1>یه حرکت،<br><em>هزار تا راه!</em></h1>
       <p class="intro">راهت رو پیدا کن، جلوی دوستت دیوار بذار و زودتر به طرف مقابل برس. همه‌چی از توی مرورگر گوشی.</p>
+      <div class="account-card" aria-label="حساب کاربری">
+        <div class="account-label">👤 حساب کاربری <span id="accountStatus">در حال بررسی...</span></div>
+        <p id="accountDescription">بدون ثبت‌نام هم می‌تونی بازی دوستانه انجام بدی. برای رنکینگ ثبت‌نام لازمه.</p>
+        <div class="account-stats" id="accountStats" hidden><span id="accountWins"></span><span id="accountLosses"></span><span id="accountRating"></span></div>
+        <div class="account-actions">
+          <button id="accountLoginBtn" class="btn secondary" type="button">ورود / ثبت‌نام</button>
+          <button id="accountLogoutBtn" class="btn ghost" type="button" hidden>خروج از حساب</button>
+          <button id="leaderboardBtn" class="btn ghost" type="button">🏆 رتبه‌بندی</button>
+        </div>
+        <p id="accountError" class="error" hidden></p>
+      </div>
       <div class="field-group">
         <label for="playerName">اسم تو توی بازی</label>
         <input id="playerName" maxlength="18" placeholder="مثلاً: قهرمان دیوارها" autocomplete="nickname">
@@ -52,6 +63,14 @@
           <small class="choice-help">رنگ دوستت خودکار رنگ دیگه می‌شه؛ دیوارها هم رنگ مهره‌ها هستن.</small>
         </fieldset>
       </div>
+      <fieldset class="choice-fieldset game-type-fieldset">
+        <legend>🏆 نوع مسابقه</legend>
+        <div class="choice-row">
+          <label class="choice"><input type="radio" name="gameType" value="friendly" checked><span>دوستانه (مهمان مجاز)</span></label>
+          <label class="choice"><input type="radio" name="gameType" value="ranked"><span>رنک‌دار (فقط اعضا)</span></label>
+        </div>
+        <small class="choice-help">در حالت رنک‌دار هر دو بازیکن باید با حساب مستقل وارد شده باشند؛ برد و باخت در پروفایل ثبت می‌شه.</small>
+      </fieldset>
       <button id="createBtn" class="btn primary wide"><span>＋</span> ساخت اتاق جدید <span class="arrow">←</span></button>
       <div class="separator"><span>یا وارد اتاق دوستت شو</span></div>
       <div class="join-row">
@@ -62,10 +81,50 @@
       <div class="lobby-hint"><span>🧱</span> هر نفر ۱۰ دیوار • صفحه ۹×۹ • کاملاً نوبتی</div>
     </section>
 
+    <section id="accountScreen" class="auth-page" hidden aria-label="حساب کاربری دیوارچین">
+      <button id="authBackBtn" class="btn ghost" type="button">→ برگشت به بازی</button>
+      <div class="auth-card">
+        <span class="mini-tag">DIVARCHIN • ACCOUNT</span>
+        <h2 id="authTitle">ورود به حساب</h2>
+        <div class="auth-tabs">
+          <button type="button" data-auth-mode="login" class="btn secondary">ورود</button>
+          <button type="button" data-auth-mode="register" class="btn ghost">ثبت‌نام</button>
+          <button type="button" data-auth-mode="recover" class="btn ghost">فراموشی رمز</button>
+        </div>
+        <form id="authForm">
+          <label for="authUsername">نام کاربری (۳ تا ۲۴ حرف یا عدد)</label>
+          <input id="authUsername" name="username" autocomplete="username" maxlength="24" required>
+          <label for="authPassword" id="authPasswordLabel">رمز عبور</label>
+          <input id="authPassword" name="password" type="password" autocomplete="current-password" minlength="8" maxlength="128" required>
+          <div id="authRepeatField" hidden><label for="authRepeat">تکرار رمز عبور</label><input id="authRepeat" type="password" autocomplete="new-password"></div>
+          <div id="authRecoveryField" hidden><label for="authRecovery">کد بازیابی</label><input id="authRecovery" autocomplete="off" dir="ltr" placeholder="XXXXXXXX-..." spellcheck="false"></div>
+          <button id="authSubmit" type="submit" class="btn primary wide">ورود</button>
+        </form>
+        <p class="auth-explain">بدون ثبت‌نام هم می‌تونی اتاق دوستانه بسازی یا به دوستت ملحق بشی. رنکینگ فقط برای حساب‌های ثبت‌نام‌شده است.</p>
+        <div id="authError" class="error" role="alert" hidden></div>
+        <section id="recoveryCodeCard" class="recovery-card" hidden>
+          <h3>🔑 کد بازیابی جدیدت</h3>
+          <p>این کد فقط همین یک‌بار نمایش داده می‌شه. جایی امن نگهش دار؛ بدون کد بازیابی امکان بازنشانی رمز فراموش‌شده وجود نداره.</p>
+          <code id="newRecoveryCode" dir="ltr"></code>
+          <button id="copyRecoveryBtn" type="button" class="btn secondary wide">کپی کد بازیابی</button>
+          <button id="recoveryDoneBtn" type="button" class="btn primary wide">کد رو ذخیره کردم؛ برگشت به بازی</button>
+        </section>
+      </div>
+    </section>
+
+    <section id="leaderboardScreen" class="auth-page" hidden aria-label="جدول رنکینگ">
+      <button id="leaderboardBackBtn" type="button" class="btn ghost">→ برگشت به بازی</button>
+      <div class="auth-card ranking-card"><span class="mini-tag">DIVARCHIN • RANKING</span><h2>🏆 برترین بازیکن‌ها</h2>
+        <p>رتبه‌بندی فقط از مسابقات رنک‌دار بین بازیکن‌های ثبت‌نام‌شده محاسبه می‌شه.</p>
+        <div id="leaderboardItems" class="leaderboard-items"></div>
+        <p id="leaderboardError" class="error" hidden></p>
+      </div>
+    </section>
+
     <section id="game" class="game-layout" hidden>
       <div class="game-main">
         <div class="game-heading">
-          <div><span class="eyebrow">نبرد دوستانه • اتاق خصوصی</span><h1>دیوارچین <span class="heading-star">✦</span></h1></div>
+          <div><span class="eyebrow" id="gameTypeLabel">نبرد دوستانه • اتاق خصوصی</span><h1>دیوارچین <span class="heading-star">✦</span></h1></div>
           <div class="room-badge"><span>کد اتاق</span><strong dir="ltr" id="gameCode">------</strong><small id="gameDuration">۳ دقیقه</small></div>
         </div>
         <div class="board-shell">
@@ -129,7 +188,7 @@
       </div>
     </section>
 
-    <div id="winnerOverlay" class="modal-backdrop" hidden><div class="modal"><div class="trophy">🏆</div><h2 id="winnerTitle">برنده شدی!</h2><p id="winnerText">چه بازی قشنگی!</p><button id="rematchBtn" class="btn primary wide">دوباره بازی کنیم ↻</button></div></div>
+    <div id="winnerOverlay" class="modal-backdrop" hidden><div class="modal"><div class="trophy">🏆</div><h2 id="winnerTitle">برنده شدی!</h2><p id="winnerText">چه بازی قشنگی!</p><button id="rematchBtn" class="btn primary wide">پیشنهاد بازی مجدد ↻</button></div></div>
     <footer>دیوارچین · ساخته‌شده برای رقابت دوستانه ✦</footer>
   </main>
 </body>

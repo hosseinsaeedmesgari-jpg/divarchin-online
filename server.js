@@ -3,6 +3,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const accounts = require('./accounts');
 
 const PORT = Number(process.env.PORT) || 3000;
 const ROOT = path.join(__dirname, 'public');
@@ -112,8 +113,10 @@ function publicState(room, id) {
   const s=room.game;
   return {
     room:room.code, you:id,
-    players: room.players.map((p,i)=>({id:i,name:p.name,side:SIDES[i], color: i === 0 ? room.settings.hostColor : (room.settings.hostColor === 'cyan' ? 'orange' : 'cyan')})),
+    players: room.players.map((p,i)=>({id:i,name:p.name,registered:!!p.accountId,side:SIDES[i], color: i === 0 ? room.settings.hostColor : (room.settings.hostColor === 'cyan' ? 'orange' : 'cyan')})),
     settings: room.settings,
+    rematchVotes: room.rematchVotes ? Array.from(room.rematchVotes) : [],
+    ratedRecorded: room.ratedRecorded === true,
     chat: room.chat.slice(-CHAT_LIMIT),
     time: { ...s.time, remainingMs: [...s.time.remainingMs], serverNow: Date.now() },
     endReason: s.endReason,
@@ -129,7 +132,27 @@ function pushToPlayer(room,id) {
     try {res.write(wire);} catch {room.players[id].listeners.delete(res);}
   }
 }
+async function recordResult(room) {
+  if(!room.settings.ranked || room.game.winner===null) return true;
+  if(room.ratedRecorded) return true;
+  if(room.recording) return false;
+  room.recording=true;
+  try {
+    await accounts.saveRankedMatch({
+      id:room.matchId,room:room.code,
+      ids:room.players.map(p=>p.accountId),winner:room.game.winner,
+      reason:room.game.endReason||'goal',duration:room.settings.durationSeconds
+    });
+    room.ratedRecorded=true;
+    room.recording=false;
+    publish(room);
+    return true;
+  }catch(e){console.error('Ranked result save failed:',e);room.recording=false;return false;}
+}
 function publish(room) {
+  if(room.game.winner!==null && room.settings.ranked && !room.ratedRecorded && !room.recording) {
+    void recordResult(room);
+  }
   room.lastActivity=Date.now();
   room.players.forEach((_,i)=>pushToPlayer(room,i));
 }
@@ -163,14 +186,25 @@ async function api(req,res,url) {
   if (req.method==='POST') {
     try {data=await readBody(req);} catch(e) {return fail(res,400,e.message);}
   }
-  if (route==='/api/health' && req.method==='GET') return send(res,200,{ok:true});
+  if (route==='/api/health' && req.method==='GET') return send(res,200,{ok:true,accountsEnabled:accounts.enabled});
+  if (route==='/api/account/me' && req.method==='GET') return send(res,200,{enabled:accounts.enabled,user:await accounts.getUser(req)});
+  if (route==='/api/leaderboard' && req.method==='GET') return send(res,200,{players:await accounts.leaderboard()});
+  if (route==='/api/account/register' && req.method==='POST') return send(res,201,await accounts.register(req,res,data));
+  if (route==='/api/account/login' && req.method==='POST') return send(res,200,await accounts.login(req,res,data));
+  if (route==='/api/account/recover' && req.method==='POST') return send(res,200,await accounts.recover(req,res,data));
+  if (route==='/api/account/logout' && req.method==='POST') return send(res,200,await accounts.logout(req,res));
   if (route==='/api/create' && req.method==='POST') {
     if (rooms.size>=MAX_ROOMS) return fail(res,503,'فعلاً اتاق جدید نمی‌توان ساخت.');
     const code=createRoomCode(), secret=token();
     const durationSeconds = [0,60,180].includes(data.durationSeconds) ? data.durationSeconds : 180;
     const hostColor = data.hostColor === 'orange' ? 'orange' : 'cyan';
-    const settings = { durationSeconds, hostColor };
-    const room={code,settings,players:[{name:cleanName(data.name),token:secret,listeners:new Set()}],game:initialState(durationSeconds),lastActivity:Date.now(),chat:[],chatCounter:0};
+    const ranked=data.ranked===true;
+    const actor=ranked?await accounts.getUser(req):await accounts.getUser(req).catch(()=>null);
+    if(ranked && !actor) return fail(res,403,'برای ساخت مسابقه رنک‌دار باید وارد حساب شوی.');
+    const settings = { durationSeconds, hostColor, ranked };
+    const room={code,settings,players:[{name:actor?.username||cleanName(data.name),accountId:actor?.id||null,token:secret,listeners:new Set()}],
+      game:initialState(durationSeconds),matchId:crypto.randomUUID(),ratedRecorded:false,recording:false,rematchVotes:new Set(),
+      lastActivity:Date.now(),chat:[],chatCounter:0};
     rooms.set(code,room);
     return send(res,201,{room:code,token:secret,state:publicState(room,0)});
   }
@@ -178,8 +212,12 @@ async function api(req,res,url) {
     const code=String(data.room||'').trim().toUpperCase(), room=rooms.get(code);
     if (!room) return fail(res,404,'اتاق پیدا نشد. کد رو بررسی کن.');
     if (room.players.length>=2) return fail(res,409,'این اتاق دو بازیکن دارد و پر شده است.');
+    const actor=room.settings.ranked?await accounts.getUser(req):await accounts.getUser(req).catch(()=>null);
+    if(room.settings.ranked && !actor) return fail(res,403,'این اتاق رنک‌دار است؛ ابتدا ثبت‌نام یا وارد حساب شو.');
+    if(room.settings.ranked && actor.id===room.players[0].accountId) return fail(res,409,'نمی‌توانی با یک حساب در هر دو سمت بازی رنک‌دار باشی.');
+    if(room.players.length>=2) return fail(res,409,'اتاق در همین لحظه پر شد.');
     const secret=token();
-    room.players.push({name:cleanName(data.name),token:secret,listeners:new Set()});
+    room.players.push({name:actor?.username||cleanName(data.name),accountId:actor?.id||null,token:secret,listeners:new Set()});
     room.game.time.turnStartedAt = Date.now(); // No clock runs while waiting for a friend.
     publish(room);
     return send(res,200,{room:code,token:secret,state:publicState(room,1)});
@@ -219,7 +257,16 @@ async function api(req,res,url) {
   if (route==='/api/restart' && req.method==='POST') {
     if (room.players.length<2) return fail(res,409,'بازیکن دوم هنوز نرسیده.');
     if (s.winner===null) return fail(res,409,'بازی هنوز تمام نشده.');
+    if(room.settings.ranked){
+      const user=await accounts.getUser(req);
+      if(!user || user.id!==room.players[id].accountId) return fail(res,401,'برای ادامه مسابقه رنک‌دار وارد حساب خودت شو.');
+      if(!room.ratedRecorded && !(await recordResult(room))) return fail(res,503,'نتیجه بازی در دیتابیس ثبت نشده؛ کمی بعد دوباره امتحان کن.');
+    }
+    room.rematchVotes.add(id);
+    publish(room);
+    if(room.rematchVotes.size!==2) return send(res,200,{ok:true,pending:true});
     room.game=initialState(room.settings.durationSeconds);
+    room.matchId=crypto.randomUUID();room.ratedRecorded=false;room.recording=false;room.rematchVotes.clear();
     room.chat=[];room.chatCounter=0;
     room.game.time.turnStartedAt = Date.now();
     publish(room);
@@ -229,6 +276,8 @@ async function api(req,res,url) {
     if (room.players.length!==2) return fail(res,409,'منتظر بازیکن دوم باشید.');
     if (s.winner!==null) return fail(res,409,'بازی تمام شده است.');
     if (s.turn!==id) return fail(res,409,'هنوز نوبت تو نیست.');
+    // Room secrets are bound to a verified account when the ranked room is joined.
+    // Avoid a database round-trip on each move: time bonuses rely on server receipt time.
     if (data.type==='move') {
       const r=data.r,c=data.c;
       if (!Number.isInteger(r)||!Number.isInteger(c)||!legalMoves(s,id).some(p=>p.r===r&&p.c===c)) return fail(res,400,'این حرکت مجاز نیست.');
@@ -272,13 +321,17 @@ function serveStatic(req,res,url) {
 const server=http.createServer((req,res)=>{
   let url;
   try {url=new URL(req.url, 'http://localhost');} catch {return fail(res,400,'آدرس نامعتبر است.');}
-  if (url.pathname.startsWith('/api/')) {api(req,res,url).catch(e=>{console.error(e);if(!res.headersSent) fail(res,500,'خطای داخلی سرور.');});}
+  if (url.pathname.startsWith('/api/')) {api(req,res,url).catch(e=>{
+    if(e.status){if(!res.headersSent)fail(res,e.status,e.message);return;}
+    console.error('API error:',e);if(!res.headersSent) fail(res,503,'خطای سرور یا اتصال دیتابیس؛ بعداً دوباره تلاش کن.');
+  });}
   else serveStatic(req,res,url);
 });
 setInterval(()=>{
   const now=Date.now();
   for (const [code,room] of rooms) {
     if (expireIfNeeded(room, now)) publish(room);
+    if(room.settings.ranked && room.game.winner!==null && !room.ratedRecorded && !room.recording) void recordResult(room);
     if (now-room.lastActivity>1000*60*60*4) {
       for (const p of room.players) for (const res of p.listeners) res.end();
       rooms.delete(code); continue;

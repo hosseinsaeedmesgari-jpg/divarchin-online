@@ -1,8 +1,16 @@
 {
   "name": "divarchin-online",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "private": true,
-  "description": "A mobile-friendly, two-player online wall-and-pawn strategy game",
-  "scripts": {"start": "node server.js"},
-  "engines": {"node": ">=18"}
+  "description": "Divarchin online multiplayer board game with optional accounts and ranking",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test_clock.js && node test_game.js && node test_realtime.js && node test_accounts.js && node test_accounts_db.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
 }
