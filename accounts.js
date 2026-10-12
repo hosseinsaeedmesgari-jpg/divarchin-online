@@ -1,15 +1,35 @@
 'use strict';
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const {promisify} = require('node:util');
 const scrypt = promisify(crypto.scrypt);
 const enabled = Boolean(process.env.DATABASE_URL);
 const {Pool} = enabled ? require('pg') : {Pool:null};
+// Download the project's root CA from Supabase Dashboard > Database Settings > SSL Configuration.
+// Place it next to this file as supabase-ca.crt (PEM format).
+const caFile = path.join(__dirname, 'supabase-ca.crt');
+function verifiedConnectionString(value) {
+  const u = new URL(value);
+  // node-postgres replaces the SSL object if any SSL parameters occur in the URI.
+  // We configure verified TLS explicitly below, instead of trusting URI SSL options.
+  ['sslmode','sslcert','sslkey','sslrootcert'].forEach(k => u.searchParams.delete(k));
+  return u.toString();
+}
+if (enabled && !fs.existsSync(caFile)) {
+  console.error('Supabase TLS: missing supabase-ca.crt. Download the CA certificate from your Supabase project.');
+}
 const pool = enabled ? new Pool({
-  connectionString:process.env.DATABASE_URL,
+  connectionString: verifiedConnectionString(process.env.DATABASE_URL),
   max:5,
   idleTimeoutMillis:20_000,
   connectionTimeoutMillis:8_000,
-  ssl:process.env.PGSSLMODE === 'disable' ? false : {rejectUnauthorized:true}
+  ssl: {
+    rejectUnauthorized: true,
+    // No insecure fallback: without the cert the OS trust store will be used,
+    // which may reject Supabase's private CA until the cert is installed.
+    ...(fs.existsSync(caFile) ? {ca: fs.readFileSync(caFile, 'utf8')} : {})
+  }
 }) : null;
 if (pool) pool.on('error',e=>console.error('Postgres connection error:',e.message));
 const COOKIE='divarchin_session';
