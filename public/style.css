@@ -36,3 +36,69 @@
 #board.wall-mode{touch-action:none}
 @media(max-width:580px){.player-stats{gap:4px}.clock{font-size:11px;min-width:49px;padding:2px 3px}.player-chip small{white-space:normal;line-height:1.5}.player-chip strong{max-width:95px}.room-badge small{font-size:9px}.choice-fieldset{padding:10px}}
 @media(prefers-reduced-motion:reduce){.clock.grace{animation:none}}
+
+/* Installed Android app: account for display cutouts. */
+@media(display-mode:standalone){.container{padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(20px,env(safe-area-inset-bottom))}}
+
+/* Divarchin — walnut & midnight edition. Local B Nazanin/B Titr when installed;
+   honest system fallbacks when fonts are not available on a player's device. */
+:root{color-scheme:dark;--bg:#0a1521;--panel:#101d2b;--panel2:#172635;--line:#385166;--text:#f7ede0;--muted:#b6b9bc;--cyan:#18d4cf;--orange:#ef943f;--violet:#a18bd9;--red:#ed6675;--wood:#c48a50}
+html,body{font-family:"B Nazanin","BNazanin","Nazanin",Tahoma,"Segoe UI",sans-serif}
+h1,h2,h3,.brand,.side-title,.chat-header-title,.game-heading h1,.lobby-card h1{font-family:"B Titr","BTitr",Tahoma,"Segoe UI",sans-serif;font-weight:900}
+body{background:radial-gradient(ellipse at 68% -16%,#254052 0,transparent 54%),radial-gradient(ellipse at 0 70%,#152c32 0,transparent 47%),linear-gradient(130deg,#09131e,#0c1927 60%,#0a121e);line-height:1.72;font-size:16px}
+.glow{filter:blur(115px);opacity:.13}.glow-a{background:#278c87}.glow-b{background:#be7636}
+.container{max-width:1390px;padding-top:20px}.topbar{margin-bottom:26px;padding:10px 0 20px;border-bottom:1px solid #a7834a30}
+.logo-mark{background:linear-gradient(145deg,#dba25f,#784125);border:1px solid #deb77f;color:#fff2da;box-shadow:0 5px 20px #0007;border-radius:13px}
+.brand{font-size:clamp(23px,3vw,35px);color:#edb777;text-shadow:0 2px 13px #f59e3540;letter-spacing:0}
+.tagline{color:#c3b4a3;font-size:12px;margin-top:-2px}
+.live-pill{background:#12382f59;border:1px solid #247b6b;color:#b2f4d9}.live-dot{background:#4cf0a9}
+.lobby-card{max-width:610px;margin-top:35px;border-color:#94704778;background:linear-gradient(146deg,#1b2a38,#111f2e);box-shadow:0 16px 55px #0008, inset 0 1px #e1b47d18}
+.mini-tag{color:#e7a966}.lobby-card h1 em{color:#efb56f}.lobby-card .intro{color:#c6c6c3;font-size:15px}
+.choice-fieldset{border-color:#55636a;background:#142536}.choice-fieldset legend{color:#fff1e1;font-size:16px}
+.choice-row:has(.choice:nth-child(3)){grid-template-columns:repeat(3,minmax(0,1fr))}
+.choice>span{background:#20313d;border-color:#455766;font-weight:700;font-size:15px;min-height:49px}
+.choice input:checked+span{background:#164544;border-color:#40d5c7;color:#e1ffff}.choice-help{font-size:13px;color:#c2bec0}
+.field-group label{font-size:16px}.field-group input,.join-row input{background:#101b2a;border-color:#4a5d6d;color:#fff5ed}
+.btn{font-size:16px;font-weight:750}.primary{background:linear-gradient(145deg,#5de6da,#10b6b2);color:#062e33;box-shadow:0 7px 27px #0ba9ab28}.primary:hover{background:#83fff0}
+.secondary{background:linear-gradient(130deg,#284f57,#203d55);border:1px solid #557887;color:#edfbff}.secondary:hover{background:#2e6470}
+.ghost{background:#172735;border-color:#43606b;color:#f0e1d2}
+.game-layout{grid-template-columns:minmax(0,1fr) 290px;gap:22px}.game-heading{margin-bottom:12px}
+.game-heading h1{color:#f2b874;font-size:33px;text-shadow:0 2px 15px #b6722648}.heading-star{font-size:19px;color:#77e3d6}
+.room-badge{background:#152635;border:1px solid #745637}.room-badge strong{color:#ffd2a3}.room-badge small{font-size:12px}
+.board-shell{background:linear-gradient(155deg,#182a38,#101b2a);border:1px solid #88673e87;box-shadow:0 25px 70px #0008,inset 0 1px #f8cf9b1c;padding:16px;border-radius:21px}
+.player-chip{background:linear-gradient(130deg,#1b2e3b,#12232f);border-color:#546273;padding:11px 13px;border-radius:15px;gap:10px}
+.player-chip.active{background:#163c3c80}.player-chip strong{font-size:15px;color:#fff1df}.player-chip small{font-size:12px;color:#c2b9ae}
+.player-chip .player-disc{width:25px;height:25px;border:2px solid #e9e1d4;box-shadow:0 0 13px var(--piece-color),inset 0 0 9px #ffffff80}
+.versus{color:#deac75;font-size:19px}
+.player-chip b{color:#e5bb8b}.player-stats .clock{font-size:18px;min-width:78px;border-color:var(--piece-color);color:var(--piece-color);background:#0c1925;padding:2px 8px;border-radius:9px}
+.clock.urgent{color:#ffd07e!important;border-color:#ed8e42!important;background:#452c20}.clock.grace{animation:time-pulse .6s infinite alternate;color:#ff8e9e!important;background:#541d28}
+.turn-status{background:#152f35;border:1px solid #1d7a6f;border-radius:11px;padding:9px 12px;font-size:16px;color:#c9eee6}.turn-status.mine{background:#14433a;border-color:#1d9586;color:#b5fff1}.turn-status.opponent{background:#48311d;border-color:#a56332;color:#ffd3a1}
+#board{width:100%;max-width:780px;touch-action:manipulation;margin:auto;border:4px ridge #a57445;border-radius:12px;background:#2c211a;box-shadow:0 12px 23px #0006}
+#board.wall-mode{touch-action:none}
+.board-labels{color:#c2b49e;font-size:12px}.board-bottom-nav{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px}
+.board-slogan{font-size:14px;letter-spacing:.5px;color:#cca16d}.chat-entry{background:#142d38;border:1px solid #189c96;color:#a2faf0;box-shadow:0 2px 13px #08ada71c}
+.unread-count{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 5px;font-size:12px;font-weight:900;background:#ef8b39;color:#22140b;border-radius:20px}
+.side-card{background:linear-gradient(135deg,#152536,#0d1b2a);border:1px solid #4b5a68;box-shadow:inset 0 1px #fff1e10b}
+.side-title{font-size:18px;color:#f0bf89}.side-card p{font-size:14px;color:#bfc2c9}.side-card .btn{font-size:15px}
+.control-btn{background:#182b39;border-color:#506276;color:#f5e8d8}.control-btn.selected{background:#15494a;border-color:#48e8d3}.control-btn b{font-size:15px}.control-btn small{font-size:13px}.control-icon{background:#284753;color:#77e7db}
+.howto-card ul{font-size:14px;color:#c8c4c2}.invite-card .hint{font-size:13px}.wall-preview-controls{background:#122c39;border-color:#27aaa6}.wall-preview-controls>span{font-size:14px}
+.modal{background:#162c39;border-color:#bd814d;box-shadow:0 28px 60px #000b}.modal h2{color:#eeb175}.modal p{font-size:16px}
+/* Standalone chat view; moving to it never pauses either player's clock. */
+.chat-screen{max-width:880px;margin:10px auto 0;min-height:580px}
+.chat-header{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+.chat-header-title{text-align:center}.chat-header-title h1{font-size:29px;margin:0;color:#efb478;line-height:1.5}.chat-header-title .eyebrow{color:#b9afa5}
+.chat-clock-notice{font-size:14px;border:1px solid #5a7a7d;color:#d6eee5;padding:8px 12px;border-radius:12px}
+.chat-card{background:linear-gradient(155deg,#182a39,#0e1d2c);border:1px solid #9a744e;border-radius:23px;box-shadow:0 25px 70px #0009;overflow:hidden}
+.chat-subhead{display:flex;align-items:center;gap:10px;padding:17px 21px;border-bottom:1px solid #526270;background:#20334380;flex-wrap:wrap}
+.chat-subhead strong{font-size:19px;color:#f5d1a1}.chat-subhead>span:last-child{font-size:13px;color:#bdc7c9}
+.chat-messages{height:min(56vh,560px);min-height:310px;display:flex;flex-direction:column;gap:13px;padding:24px 19px;overflow-y:auto;overscroll-behavior:contain;scrollbar-color:#506c7c transparent}
+.chat-empty{margin:auto;text-align:center;color:#b6c2c5;font-size:17px}
+.chat-bubble{max-width:min(86%,470px);min-width:160px;padding:10px 14px;border-radius:16px;background:#243746;border:1px solid #4f6b78;align-self:flex-start;box-shadow:0 5px 15px #0003}
+.chat-bubble.mine{align-self:flex-end;background:#15524c;border-color:#24998b}.chat-bubble.theirs{align-self:flex-start;background:#2b3444;border-color:#536075}
+.chat-author{display:flex;align-items:center;gap:6px;color:#e9bc87;font-size:13px}.chat-author .color-dot{width:11px;height:11px}.chat-author time{margin-right:auto;color:#b8c1c4;direction:ltr;font-size:12px;font-family:Consolas,monospace}
+.chat-bubble p{white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0 1px;color:#f5f4f1;font-size:17px}
+.chat-compose{display:flex;gap:12px;padding:15px 17px 5px;border-top:1px solid #455967}.chat-compose input{min-width:0;flex:1;border:1px solid #58717d;border-radius:13px;background:#0c1a29;color:#fff5e9;outline:0;padding:12px 15px;font-size:17px}.chat-compose input:focus{border-color:#2bcec5}.chat-compose button{white-space:nowrap}
+.chat-card .error{margin:5px 18px}.chat-counter{color:#96abb4;text-align:left;font-size:12px;padding:2px 21px 10px;direction:ltr}
+@media(max-width:960px){.game-layout{grid-template-columns:minmax(0,1fr)}.sidebar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.howto-card{grid-column:1/3}.sidebar>button{grid-column:1/3}}
+@media(max-width:580px){.container{padding:13px 9px}.topbar{margin-bottom:14px}.brand{font-size:23px}.tagline{font-size:10px}.lobby-card{margin-top:20px;padding:19px 13px}.choice-row:has(.choice:nth-child(3)){gap:5px}.choice-row:has(.choice:nth-child(3)) .choice>span{font-size:13px;padding:6px 4px}.game-heading h1{font-size:25px}.board-shell{padding:8px}.player-chip{gap:5px;padding:7px 5px}.player-chip .player-disc{width:16px;height:16px}.player-chip strong{font-size:12px}.player-chip small{font-size:10px}.player-chip .player-stats .clock{font-size:13px;min-width:56px;padding:2px 3px}.player-chip b{font-size:11px}.turn-status{font-size:14px}.board-bottom-nav{margin-top:10px}.board-slogan{font-size:11px}.sidebar{display:flex}.side-card{padding:14px}.chat-header{justify-content:center}.chat-header-title{order:-1;width:100%}.chat-clock-notice{font-size:12px}.chat-screen{min-height:0}.chat-messages{height:55vh;min-height:280px;padding:12px}.chat-compose{padding:10px}.chat-compose button{padding:10px;min-width:72px}.chat-bubble{max-width:90%}.chat-header-title h1{font-size:25px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation-duration:0s!important;transition-duration:0s!important}}

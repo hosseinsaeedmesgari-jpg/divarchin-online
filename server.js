@@ -10,6 +10,9 @@ const rooms = new Map();
 const SIDES = ['بالا', 'پایین'];
 const MAX_BODY = 16 * 1024;
 const MAX_ROOMS = 3000;
+const MAX_CHAT_LENGTH = 280;
+const CHAT_LIMIT = 80;
+const CHAT_INTERVAL_MS = 800;
 
 function cleanName(value) {
   return (typeof value === 'string' ? value.trim().slice(0, 18) : '') || 'بازیکن';
@@ -24,25 +27,37 @@ function token() { return crypto.randomBytes(24).toString('base64url'); }
 function initialState(durationSeconds = 180) {
   return {
     // The server owns both chess clocks; clients only display them.
-    time: { durationSeconds, remainingMs: [durationSeconds * 1000, durationSeconds * 1000], turnStartedAt: null },
+    time: { durationSeconds, remainingMs: durationSeconds === 0 ? [null, null] : [durationSeconds * 1000, durationSeconds * 1000], turnStartedAt: null, lastBonus: null },
     endReason: null,
     pawns: [{ r: 8, c: 4 }, { r: 0, c: 4 }],
     walls: [], remaining: [10, 10], turn: 0, winner: null,
     moveNumber: 1, startedAt: Date.now()
   };
 }
-// The reserve runs down only on a player's own turns. Once it reaches zero,
-// that player still gets a 2-second grace period on this and every later turn.
-// Failure to play before the grace period expires loses the game on time.
+// The server is authoritative. Unlimited games never expire. Timed games lose
+// immediately when their active player's reserve is exhausted; no grace period.
 function expireIfNeeded(room, now = Date.now()) {
   const s = room.game;
-  if (room.players.length !== 2 || s.winner !== null || s.time.turnStartedAt === null) return false;
+  if (room.settings.durationSeconds === 0 || room.players.length !== 2 ||
+      s.winner !== null || s.time.turnStartedAt === null) return false;
   const elapsed = Math.max(0, now - s.time.turnStartedAt);
-  if (elapsed < s.time.remainingMs[s.turn] + 2000) return false;
+  if (elapsed < s.time.remainingMs[s.turn]) return false;
   s.time.remainingMs[s.turn] = 0;
   s.winner = 1 - s.turn;
   s.endReason = 'timeout';
+  s.time.turnStartedAt = null;
   return true;
+}
+// Applies exactly +1000ms, never a fractional/inferred bonus. It activates when
+// the clock has fallen strictly below half of the original chosen duration.
+function settleTurnClock(game, player, now) {
+  const duration = game.time.durationSeconds;
+  if (duration === 0) return;
+  const elapsed = Math.max(0, now - game.time.turnStartedAt);
+  const left = Math.max(0, game.time.remainingMs[player] - elapsed);
+  const bonus = left > 0 && left < duration * 500 && elapsed <= 1000 ? 1000 : 0;
+  game.time.remainingMs[player] = left + bonus;
+  game.time.lastBonus = bonus ? {player, moveNumber:game.moveNumber, valueMs:1000} : null;
 }
 function playerId(room, candidate) { return room.players.findIndex(p => p.token === candidate); }
 function isInside(r,c) { return r >= 0 && r < 9 && c >= 0 && c < 9; }
@@ -99,6 +114,7 @@ function publicState(room, id) {
     room:room.code, you:id,
     players: room.players.map((p,i)=>({id:i,name:p.name,side:SIDES[i], color: i === 0 ? room.settings.hostColor : (room.settings.hostColor === 'cyan' ? 'orange' : 'cyan')})),
     settings: room.settings,
+    chat: room.chat.slice(-CHAT_LIMIT),
     time: { ...s.time, remainingMs: [...s.time.remainingMs], serverNow: Date.now() },
     endReason: s.endReason,
     waiting:room.players.length<2,
@@ -151,10 +167,10 @@ async function api(req,res,url) {
   if (route==='/api/create' && req.method==='POST') {
     if (rooms.size>=MAX_ROOMS) return fail(res,503,'فعلاً اتاق جدید نمی‌توان ساخت.');
     const code=createRoomCode(), secret=token();
-    const durationSeconds = [60,180].includes(data.durationSeconds) ? data.durationSeconds : 180;
+    const durationSeconds = [0,60,180].includes(data.durationSeconds) ? data.durationSeconds : 180;
     const hostColor = data.hostColor === 'orange' ? 'orange' : 'cyan';
     const settings = { durationSeconds, hostColor };
-    const room={code,settings,players:[{name:cleanName(data.name),token:secret,listeners:new Set()}],game:initialState(durationSeconds),lastActivity:Date.now()};
+    const room={code,settings,players:[{name:cleanName(data.name),token:secret,listeners:new Set()}],game:initialState(durationSeconds),lastActivity:Date.now(),chat:[],chatCounter:0};
     rooms.set(code,room);
     return send(res,201,{room:code,token:secret,state:publicState(room,0)});
   }
@@ -185,10 +201,26 @@ async function api(req,res,url) {
     req.on('close',()=>room.players[id].listeners.delete(res));
     return;
   }
+  if (route==='/api/chat' && req.method==='POST') {
+    if (room.players.length !== 2) return fail(res,409,'چت پس از ورود بازیکن دوم فعال می‌شود.');
+    const message = typeof data.message === 'string' ? data.message.trim() : '';
+    if (!message || message.length > MAX_CHAT_LENGTH || /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(message)) {
+      return fail(res,400,'پیام باید بین ۱ تا ۲۸۰ نویسه و بدون نویسه کنترلی باشد.');
+    }
+    const player=room.players[id], now=Date.now();
+    if (player.lastChatAt && now-player.lastChatAt < CHAT_INTERVAL_MS) return fail(res,429,'لطفاً کمی بین پیام‌ها فاصله بگذار.');
+    player.lastChatAt=now;
+    const item={id:++room.chatCounter,from:id,message,at:now};
+    room.chat.push(item);
+    if (room.chat.length>CHAT_LIMIT) room.chat.shift();
+    publish(room);
+    return send(res,200,{ok:true,id:item.id});
+  }
   if (route==='/api/restart' && req.method==='POST') {
     if (room.players.length<2) return fail(res,409,'بازیکن دوم هنوز نرسیده.');
     if (s.winner===null) return fail(res,409,'بازی هنوز تمام نشده.');
     room.game=initialState(room.settings.durationSeconds);
+    room.chat=[];room.chatCounter=0;
     room.game.time.turnStartedAt = Date.now();
     publish(room);
     return send(res,200,{ok:true});
@@ -209,7 +241,7 @@ async function api(req,res,url) {
       s.walls.push({o,r,c,owner:id}); s.remaining[id]--;
     } else return fail(res,400,'عمل ناشناخته است.');
     const now = Date.now();
-    s.time.remainingMs[id] = Math.max(0, s.time.remainingMs[id] - Math.max(0, now - s.time.turnStartedAt));
+    settleTurnClock(s,id,now);
     if (s.winner===null) {
       s.turn=1-s.turn;
       s.moveNumber++;
@@ -231,7 +263,7 @@ function serveStatic(req,res,url) {
   fs.stat(file,(err,stat)=>{
     if (err||!stat.isFile()) return fail(res,404,'صفحه پیدا نشد.');
     const ext=path.extname(file);
-    const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml'};
+    const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json'};
     res.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'});
     if (req.method==='HEAD') return res.end();
     fs.createReadStream(file).pipe(res);
@@ -264,4 +296,4 @@ setInterval(() => {
   }
 }, 100).unref();
 server.listen(PORT,'0.0.0.0',()=>console.log(`Divarchin listening on http://localhost:${PORT}`));
-module.exports={initialState,hasWallBlock,legalWall,legalMoves,reachable};
+module.exports={initialState,hasWallBlock,legalWall,legalMoves,reachable,expireIfNeeded,settleTurnClock};

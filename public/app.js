@@ -9,13 +9,19 @@
     inviteNote:$('inviteNote'),winnerOverlay:$('winnerOverlay'),winnerTitle:$('winnerTitle'),winnerText:$('winnerText'),
     rematch:$('rematchBtn'),newRoom:$('newRoomBtn'),
     previewControls:$('wallPreviewControls'),previewHelp:$('previewHelp'),
-    confirmWall:$('confirmWallBtn'),cancelWall:$('cancelWallBtn')
+    confirmWall:$('confirmWallBtn'),cancelWall:$('cancelWallBtn'),
+    chatScreen:$('chatScreen'),chatMessages:$('chatMessages'),chatInput:$('chatInput'),chatForm:$('chatForm'),chatError:$('chatError'),chatCount:$('chatCharCount'),
+    backToGame:$('backToGameBtn'),chatRoomCode:$('chatRoomCode'),chatClockNotice:$('chatClockNotice'),
+    chatUnread:$('chatUnread'),chatUnreadSide:$('chatUnreadSide'),sendChat:$('sendChatBtn')
   };
   let room='', secret='', state=null, stream=null, mode='move', hover=null, selectedWall=null;
   let sending=false, pointerKind='mouse', touchingWall=false, clockReceivedAt=0, lastMoveNumber=-1;
+  let chatOpen=false, seenChatId=0, chatSending=false, currentChatRoom='';
+  let animation=null, animationFrame=0;
+  const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const ctx=el.board.getContext('2d');
   const W=600, H=600, CELL=50, GAP=10, STEP=CELL+GAP, ORIGIN=(W-(9*CELL+8*GAP))/2;
-  const colors={cyan:'#6af0db', orange:'#ffb381'};
+  const colors={cyan:'#0ebfbd', orange:'#ec8935'};
   const colorName={cyan:'فیروزه‌ای',orange:'نارنجی'};
   const coarsePointer=window.matchMedia('(pointer: coarse)').matches;
 
@@ -41,10 +47,17 @@
       selectedWall=null;
       hover=null;
     }
+    if (!state || currentChatRoom !== next.room || (next.moveNumber===1 && state.moveNumber>1)) {
+      seenChatId=Math.max(0,...(next.chat || []).map(x=>x.id));
+      currentChatRoom=next.room;
+    }
+    const prior=state;
     state=next;
+    if (prior && prior.room===next.room && prior.moveNumber<=next.moveNumber) animatePawns(prior.pawns,next.pawns);
     clockReceivedAt=performance.now();
     lastMoveNumber=next.moveNumber;
     render();
+    renderChat();
   }
   function setSession(data) {
     room=data.room;secret=data.token;
@@ -52,7 +65,7 @@
     sessionStorage.setItem('divarchin-last',room);
     const url=new URL(location.href);url.searchParams.set('room',room);
     history.replaceState(null,'',url);
-    el.lobby.hidden=true;el.game.hidden=false;
+    chatOpen=false;el.chatScreen.hidden=true;el.lobby.hidden=true;el.game.hidden=false;
     el.gameCode.textContent=room;
     el.winnerOverlay.hidden=true;
     msg(el.lobbyError,'');
@@ -118,8 +131,8 @@
       $('player'+id).style.setProperty('--piece-color',colorOf(id));
       $('player'+id).classList.toggle('active',!state.waiting && state.winner===null && state.turn===id);
     }
-    const mins=state.settings.durationSeconds/60;
-    el.gameDuration.textContent=`${mins===1?'۱':'۳'} دقیقه برای هر نفر`;
+    const duration=state.settings.durationSeconds;
+    el.gameDuration.textContent=duration===0?'∞ زمان نامحدود':`${duration===60?'۱':'۳'} دقیقه برای هر نفر`;
     $('goal0').textContent=`↑ هدف ${colorName[state.players[0].color]}`;
     $('goal1').textContent=`هدف ${colorName[state.players[1]?.color || (state.players[0].color==='cyan'?'orange':'cyan')]} ↓`;
     el.turnStatus.className='turn-status';
@@ -127,6 +140,9 @@
     else if(state.winner!==null) el.turnStatus.textContent=state.winner===state.you?'🏆 برنده شدی!':'🎯 بازی تموم شد!';
     else if(isMyTurn()) {el.turnStatus.textContent='✨ نوبت توئه! حرکت کن یا دیوار بذار';el.turnStatus.classList.add('mine');}
     else {el.turnStatus.textContent=`⏳ نوبت ${state.players[state.turn].name} ـه`;el.turnStatus.classList.add('opponent');}
+    if (!state.waiting && state.winner===null && state.time.lastBonus && state.time.lastBonus.moveNumber===state.moveNumber-1) {
+      el.turnStatus.textContent += ` • ⚡ +۱ ثانیه برای ${state.players[state.time.lastBonus.player].name}`;
+    }
     if(state.remaining[state.you]===0 && isWallMode()) {mode='move';hover=null;selectedWall=null;}
     updateModeButtons();
     renderPreviewControls();
@@ -135,7 +151,7 @@
       const win=state.winner===state.you;
       el.winnerTitle.textContent=win?'بردی! آفرین 🎉':'این دفعه دوستت برد!';
       el.winnerText.textContent=state.endReason==='timeout' ?
-        (win?'زمان دوستت و فرصت ۲ ثانیه‌ای اون تموم شد.':'زمان اصلی و فرصت ۲ ثانیه‌ای تو تموم شد.') :
+        (win?'زمان دوستت به صفر رسید.':'زمان تو به صفر رسید.') :
         (win?'زودتر از حریفت به اون طرف صفحه رسیدی.':'یه دست دیگه بازی کن و جبران کن!');
     }
     draw();
@@ -156,18 +172,21 @@
     if(!state) return;
     for(const id of [0,1]) {
       const active=!state.waiting && state.winner===null && state.turn===id;
+      const clock=$('player'+id+'Clock');
+      if (state.settings.durationSeconds===0) {
+        clock.textContent='∞';clock.classList.remove('urgent','grace');continue;
+      }
       const reserve=state.time.remainingMs[id];
       const elapsed=active?activeElapsed():0;
       const reserveLeft=Math.max(0,reserve-elapsed);
-      const graceLeft=active && reserveLeft===0 ? Math.max(0,reserve+2000-elapsed) : 0;
-      const clock=$('player'+id+'Clock');
-      clock.textContent=formatTime(reserveLeft>0?reserveLeft:graceLeft);
-      clock.classList.toggle('urgent',active && (reserveLeft<=10000));
+      clock.textContent=formatTime(reserveLeft);
+      clock.classList.toggle('urgent',active && reserveLeft<=10000);
       clock.classList.toggle('grace',active && reserveLeft===0);
     }
-    if(!state.waiting && state.winner===null && state.turn===state.you && state.time.remainingMs[state.you]<=activeElapsed()) {
-      el.turnStatus.textContent='⚡ زمان اصلی تموم شده؛ فقط ۲ ثانیه برای این نوبت!';
+    if(state.settings.durationSeconds!==0 && !state.waiting && state.winner===null && state.turn===state.you && state.time.remainingMs[state.you]<=activeElapsed()) {
+      el.turnStatus.textContent='⏳ ساعت به صفر رسید؛ منتظر تأیید سرور...';
     }
+    if(chatOpen && state) { el.chatClockNotice.textContent=state.settings.durationSeconds===0?'∞ بازی بدون محدودیت زمانی':isMyTurn()?'⏱ نوبت توئه؛ ساعت در حال شمارشه':'⏱ ساعت بازی همچنان فعاله'; }
   }
   setInterval(updateClocks,100);
   function roundRect(x,y,w,h,r,fill,stroke) {
@@ -175,50 +194,95 @@
     if(fill) {ctx.fillStyle=fill;ctx.fill();}
     if(stroke) {ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();}
   }
+  function animatePawns(before,after) {
+    const moved=after.findIndex((p,id)=>p.r!==before[id].r||p.c!==before[id].c);
+    if(moved<0 || reduceMotion) return;
+    const from=before[moved],to=after[moved];
+    animation={id:moved,from:{...from},to:{...to},start:performance.now(),duration:340};
+    if(animationFrame)cancelAnimationFrame(animationFrame);
+    const frame=()=>{
+      if(!animation) return;
+      draw();
+      if(performance.now()-animation.start<animation.duration) animationFrame=requestAnimationFrame(frame);
+      else {animation=null;animationFrame=0;draw();}
+    };
+    animationFrame=requestAnimationFrame(frame);
+  }
   function pawn(x,y,fill) {
     ctx.save();
-    ctx.shadowColor=fill;ctx.shadowBlur=19;
-    ctx.fillStyle=fill;ctx.beginPath();ctx.arc(x,y,19,0,Math.PI*2);ctx.fill();
-    ctx.shadowBlur=0;ctx.strokeStyle='#ffffffa8';ctx.lineWidth=3;ctx.stroke();
+    ctx.shadowColor='#2011078c';ctx.shadowBlur=12;ctx.shadowOffsetY=8;
+    const foot=ctx.createLinearGradient(x-23,y+7,x+23,y+21);
+    foot.addColorStop(0,'#163342');foot.addColorStop(.25,fill);foot.addColorStop(.7,fill);foot.addColorStop(1,'#2a2423');
+    ctx.beginPath();ctx.ellipse(x,y+13,19,11,0,0,Math.PI*2);ctx.fillStyle=foot;ctx.fill();
+    ctx.shadowBlur=0;ctx.shadowOffsetY=0;
+    const stem=ctx.createLinearGradient(x-16,y-4,x+17,y+11);
+    stem.addColorStop(0,'#fff3d0');stem.addColorStop(.18,fill);stem.addColorStop(.7,fill);stem.addColorStop(1,'#3d3034');
+    roundRect(x-10,y-3,20,20,10,stem);
+    const ball=ctx.createRadialGradient(x-7,y-14,1,x,y-6,19);
+    ball.addColorStop(0,'#fff5d6');ball.addColorStop(.35,fill);ball.addColorStop(1,'#1b3540');
+    ctx.beginPath();ctx.arc(x,y-9,15,0,Math.PI*2);ctx.fillStyle=ball;ctx.fill();
+    ctx.strokeStyle='#ffffff55';ctx.lineWidth=1;ctx.stroke();
     ctx.restore();
   }
   function wallRect(o,r,c) {
     if(o==='h') return {x:ORIGIN+c*STEP-2,y:ORIGIN+r*STEP+CELL+1,w:2*CELL+GAP+4,h:GAP-2};
     return {x:ORIGIN+c*STEP+CELL+1,y:ORIGIN+r*STEP-2,w:GAP-2,h:2*CELL+GAP+4};
   }
+  function wall(x) {
+    const {o,r,c,owner}=x,a=wallRect(o,r,c),color=colorOf(owner??state.you);
+    ctx.save();ctx.shadowColor='#422a1e95';ctx.shadowBlur=7;ctx.shadowOffsetY=4;
+    roundRect(a.x,a.y,a.w,a.h,2,'#493122');
+    ctx.shadowBlur=0;ctx.shadowOffsetY=0;
+    const gr=ctx.createLinearGradient(a.x,a.y,a.x+a.w,a.y+a.h);
+    gr.addColorStop(0,'#ffffff82');gr.addColorStop(.20,color);gr.addColorStop(.75,color);gr.addColorStop(1,'#453322');
+    roundRect(a.x,a.y-2,a.w,a.h,2,gr,'#452d2080');
+    ctx.restore();
+  }
   function draw() {
     ctx.clearRect(0,0,W,H);
-    ctx.fillStyle='#0c172c';ctx.fillRect(0,0,W,H);
-    roundRect(ORIGIN-9,ORIGIN-9,9*CELL+8*GAP+18,9*CELL+8*GAP+18,18,'#283451','#3c506d');
+    const bg=ctx.createLinearGradient(0,0,W,H);
+    bg.addColorStop(0,'#1e2732');bg.addColorStop(1,'#111923');ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+    ctx.save();ctx.shadowColor='#000a';ctx.shadowBlur=22;ctx.shadowOffsetY=7;
+    roundRect(ORIGIN-15,ORIGIN-15,9*CELL+8*GAP+30,9*CELL+8*GAP+30,12,'#663e26');ctx.restore();
+    const trim=ctx.createLinearGradient(0,0,W,H);trim.addColorStop(0,'#bd8551');trim.addColorStop(.5,'#7e4d2e');trim.addColorStop(1,'#3d241b');
+    roundRect(ORIGIN-13,ORIGIN-13,9*CELL+8*GAP+26,9*CELL+8*GAP+26,11,trim,'#d3a46a');
+    roundRect(ORIGIN-5,ORIGIN-5,9*CELL+8*GAP+10,9*CELL+8*GAP+10,4,'#724326');
     for(let r=0;r<9;r++) for(let c=0;c<9;c++) {
-      const cell=r===0?'#1f393f':r===8?'#45342f':'#1b2940';
-      roundRect(ORIGIN+c*STEP,ORIGIN+r*STEP,CELL,CELL,5,cell);
+      const x=ORIGIN+c*STEP,y=ORIGIN+r*STEP;
+      const wood=ctx.createLinearGradient(x,y,x+CELL,y+CELL);
+      const even=(r+c)%2===0;
+      wood.addColorStop(0,even?'#edc994':'#e4ba82');
+      wood.addColorStop(.45,even?'#e8bb80':'#dbad73');
+      wood.addColorStop(1,even?'#d7a66b':'#cfa06a');
+      roundRect(x,y,CELL,CELL,2,wood,'#ad7b4c');
+      ctx.save();ctx.globalAlpha=.11;ctx.strokeStyle='#80552b';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(x+9,y+8);ctx.bezierCurveTo(x+13,y+20,x+6,y+32,x+18,y+43);ctx.stroke();ctx.restore();
     }
     if(!state)return;
     if(isMyTurn()&&mode==='move') for(const p of state.legalMoves) {
       const x=ORIGIN+p.c*STEP+CELL/2,y=ORIGIN+p.r*STEP+CELL/2;
-      ctx.fillStyle='#78eedba6';ctx.beginPath();ctx.arc(x,y,11,0,Math.PI*2);ctx.fill();
-      ctx.strokeStyle='#a6fff2';ctx.lineWidth=2;ctx.stroke();
+      ctx.save();ctx.shadowColor='#10bdb6';ctx.shadowBlur=10;ctx.fillStyle='#0caca5a8';ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#bcfff4';ctx.lineWidth=1.8;ctx.stroke();ctx.restore();
     }
-    for(const w of state.walls) {
-      const a=wallRect(w.o,w.r,w.c), color=colorOf(w.owner === 1 ? 1 : 0);
-      ctx.save();ctx.shadowColor=color;ctx.shadowBlur=9;
-      roundRect(a.x,a.y,a.w,a.h,3,color);ctx.restore();
-    }
+    for(const w of state.walls)wall(w);
     const preview=selectedWall || hover;
     if(preview && isMyTurn() && isWallMode() && state.remaining[state.you]>0) {
-      const a=wallRect(mode,preview.r,preview.c), color=colorOf(state.you);
-      ctx.save();ctx.globalAlpha=.55;ctx.shadowColor=color;ctx.shadowBlur=13;
+      const a=wallRect(mode,preview.r,preview.c),color=colorOf(state.you);
+      ctx.save();ctx.globalAlpha=.68;ctx.shadowColor=color;ctx.shadowBlur=12;
       roundRect(a.x,a.y,a.w,a.h,3,color);
-      if(selectedWall) roundRect(a.x-3,a.y-3,a.w+6,a.h+6,4,null,'#ffffff');
-      ctx.restore();
+      if(selectedWall)roundRect(a.x-3,a.y-3,a.w+6,a.h+6,5,null,'#ffffff');ctx.restore();
     }
     for(let id=0;id<state.pawns.length;id++) {
-      const p=state.pawns[id];pawn(ORIGIN+p.c*STEP+CELL/2,ORIGIN+p.r*STEP+CELL/2,colorOf(id));
+      let p=state.pawns[id];
+      if(animation && animation.id===id) {
+        const t=Math.min(1,Math.max(0,(performance.now()-animation.start)/animation.duration));
+        const ease=t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+        p={r:animation.from.r+(animation.to.r-animation.from.r)*ease,c:animation.from.c+(animation.to.c-animation.from.c)*ease};
+      }
+      pawn(ORIGIN+p.c*STEP+CELL/2,ORIGIN+p.r*STEP+CELL/2,colorOf(id));
     }
     if(state.waiting) {
-      roundRect(130,258,340,83,15,'#142b3aea','#537d8b');
-      ctx.fillStyle='#ffffff';ctx.textAlign='center';ctx.font='bold 19px Tahoma,sans-serif';ctx.fillText('منتظر بازیکن دوم...',300,305);
+      roundRect(122,265,356,72,15,'#172639ed','#bd8750');
+      ctx.fillStyle='#fff8ef';ctx.textAlign='center';ctx.font='bold 22px "B Titr", Tahoma, sans-serif';ctx.fillText('منتظر ورود بازیکن دوم...',300,307);
     }
   }
   function canvasCoords(ev) {
@@ -293,6 +357,67 @@
     mode=btn.dataset.mode;hover=null;selectedWall=null;msg(el.gameError,'');
     updateModeButtons();renderPreviewControls();draw();
   }));
+  function openChat() {
+    if (!state) return;
+    chatOpen=true;
+    seenChatId=Math.max(0,...(state.chat||[]).map(x=>x.id));
+    el.game.hidden=true;el.chatScreen.hidden=false;
+    el.chatRoomCode.textContent=room;
+    renderChat();updateClocks();
+    window.scrollTo(0,0);
+  }
+  function closeChat() {
+    chatOpen=false;el.chatScreen.hidden=true;el.game.hidden=false;
+    renderChat();window.scrollTo(0,0);
+  }
+  function renderChat() {
+    if(!state)return;
+    const messages=state.chat||[];
+    if(chatOpen) seenChatId=Math.max(seenChatId,...messages.map(x=>x.id),0);
+    const unread=messages.filter(x=>x.id>seenChatId && x.from!==state.you).length;
+    for(const node of [el.chatUnread,el.chatUnreadSide]) {
+      node.hidden=!unread;
+      node.textContent=unread>99?'۹۹+':unread.toLocaleString('fa-IR');
+    }
+    if(!chatOpen)return;
+    const nearBottom=el.chatMessages.scrollHeight-el.chatMessages.scrollTop-el.chatMessages.clientHeight < 90;
+    const priorLast=el.chatMessages.dataset.lastId||'';
+    const nextLast=messages.map(x=>x.id).join(',');
+    if(priorLast===nextLast)return;
+    el.chatMessages.dataset.lastId=nextLast;
+    el.chatMessages.replaceChildren();
+    if(messages.length===0){
+      const empty=document.createElement('p');empty.className='chat-empty';empty.textContent='هنوز پیامی نیست؛ اولین پیام رو تو بفرست! 👋';el.chatMessages.append(empty);
+    }
+    for(const item of messages) {
+      const bubble=document.createElement('article');bubble.className='chat-bubble '+(item.from===state.you?'mine':'theirs');
+      const head=document.createElement('div');head.className='chat-author';
+      const dot=document.createElement('span');dot.className='color-dot '+(state.players[item.from]?.color||'cyan');
+      const author=document.createElement('b');author.textContent=state.players[item.from]?.name||'بازیکن';
+      const when=document.createElement('time');when.textContent=new Date(item.at).toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit'});
+      head.append(dot,author,when);
+      const body=document.createElement('p');body.textContent=item.message; // Never inject chat HTML.
+      bubble.append(head,body);el.chatMessages.append(bubble);
+    }
+    if(nearBottom || !priorLast) el.chatMessages.scrollTop=el.chatMessages.scrollHeight;
+  }
+  el.chatForm.addEventListener('submit',async ev=>{
+    ev.preventDefault();
+    const message=el.chatInput.value.trim();
+    if(!message||chatSending)return;
+    chatSending=true;el.sendChat.disabled=true;msg(el.chatError,'');
+    try {
+      await request('/api/chat',{room,token:secret,message});
+      el.chatInput.value='';el.chatCount.textContent='۰ / ۲۸۰';
+    } catch(err) {msg(el.chatError,err.message);}
+    finally {chatSending=false;el.sendChat.disabled=false;el.chatInput.focus();}
+  });
+  el.chatInput.addEventListener('input',()=>{
+    el.chatCount.textContent=el.chatInput.value.length.toLocaleString('fa-IR')+' / ۲۸۰';
+  });
+  $('openChatBtn').addEventListener('click',openChat);
+  $('openChatSideBtn').addEventListener('click',openChat);
+  el.backToGame.addEventListener('click',closeChat);
   async function copy(text,success) {
     try {
       if(navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text);
@@ -316,6 +441,9 @@
   el.newRoom.addEventListener('click',()=>{
     if(stream)stream.close();stream=null;
     room='';secret='';state=null;mode='move';hover=null;selectedWall=null;lastMoveNumber=-1;
+    chatOpen=false;seenChatId=0;currentChatRoom='';animation=null;
+    if(animationFrame)cancelAnimationFrame(animationFrame);animationFrame=0;
+    el.chatMessages.dataset.lastId='';el.chatScreen.hidden=true;
     sessionStorage.removeItem('divarchin-last');
     history.replaceState(null,'',location.pathname);
     el.lobby.hidden=false;el.game.hidden=true;el.winnerOverlay.hidden=true;

@@ -3,18 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#101325">
+  <meta name="theme-color" content="#0c1725">
   <meta name="description" content="دیوارچین؛ بازی استراتژی دونفره آنلاین با اتاق خصوصی و لینک دعوت">
   <title>دیوارچین | بازی آنلاین دو نفره</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="/icon-192.png">
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" defer></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js').catch(() => {}));
+    }
+  </script>
 </head>
 <body>
   <div class="glow glow-a"></div><div class="glow glow-b"></div>
   <main class="container">
     <header class="topbar">
-      <div class="logo"><div class="logo-mark">▦</div><div><div class="brand">دیوارچین <span class="spark">✦</span></div><div class="tagline">دوئل فکری آنلاین</div></div></div>
-      <span class="live-pill"><span class="live-dot"></span> دونفره و زنده</span>
+      <div class="logo"><div class="logo-mark">♟</div><div><div class="brand">دیوارچین <span class="spark">✦</span></div><div class="tagline">فکر کن، راه بساز، جلو برو</div></div></div>
+      <span class="live-pill"><span class="live-dot"></span> رقابت آنلاین دونفره</span>
     </header>
 
     <section id="lobby" class="lobby-card" aria-label="ساخت یا ورود به اتاق">
@@ -31,8 +39,9 @@
           <div class="choice-row">
             <label class="choice"><input type="radio" name="duration" value="60"><span>۱ دقیقه</span></label>
             <label class="choice"><input type="radio" name="duration" value="180" checked><span>۳ دقیقه</span></label>
+            <label class="choice"><input type="radio" name="duration" value="0"><span>∞ نامحدود</span></label>
           </div>
-          <small class="choice-help">بعد از تمام شدن زمان، در هر نوبت فقط ۲ ثانیه فرصت داری.</small>
+          <small class="choice-help">وقتی کمتر از نصف زمانت مانده باشد، هر حرکتِ حداکثر ۱ ثانیه‌ای دقیقاً ۱ ثانیه پاداش می‌گیرد. در حالت نامحدود ساعت وجود ندارد.</small>
         </fieldset>
         <fieldset class="choice-fieldset">
           <legend>🎨 رنگ مهره میزبان (تو)</legend>
@@ -56,13 +65,13 @@
     <section id="game" class="game-layout" hidden>
       <div class="game-main">
         <div class="game-heading">
-          <div><span class="eyebrow">اتاق خصوصی</span><h1>بازی شروع شد!</h1></div>
+          <div><span class="eyebrow">نبرد دوستانه • اتاق خصوصی</span><h1>دیوارچین <span class="heading-star">✦</span></h1></div>
           <div class="room-badge"><span>کد اتاق</span><strong dir="ltr" id="gameCode">------</strong><small id="gameDuration">۳ دقیقه</small></div>
         </div>
         <div class="board-shell">
           <div class="players-row">
             <div class="player-chip player-one" id="player0"><span class="player-disc"></span><div><strong id="player0Name">بازیکن ۱</strong><small>هدف: رسیدن به بالا</small></div><div class="player-stats"><time id="player0Clock" class="clock" dir="ltr">03:00</time><b id="player0Walls">۱۰ 🧱</b></div></div>
-            <div class="versus">VS</div>
+            <div class="versus">✦</div>
             <div class="player-chip player-two" id="player1"><span class="player-disc"></span><div><strong id="player1Name">منتظر...</strong><small>هدف: رسیدن به پایین</small></div><div class="player-stats"><time id="player1Clock" class="clock" dir="ltr">03:00</time><b id="player1Walls">۱۰ 🧱</b></div></div>
           </div>
           <div id="turnStatus" class="turn-status" aria-live="polite">منتظر بازیکن دوم...</div>
@@ -75,6 +84,7 @@
             </div>
           </div>
           <div class="board-labels"><span id="goal0">↑ هدف بازیکن اول</span><span id="goal1">هدف بازیکن دوم ↓</span></div>
+          <div class="board-bottom-nav"><button id="openChatBtn" class="btn chat-entry" type="button">💬 ورود به چت <span id="chatUnread" class="unread-count" hidden>۰</span></button><span class="board-slogan">فکر کن · راه بساز · جلو برو</span></div>
         </div>
       </div>
       <aside class="sidebar">
@@ -95,9 +105,28 @@
           </div>
           <div id="gameError" class="error" role="alert" hidden></div>
         </section>
-        <section class="side-card howto-card"><div class="side-title"><span>💡</span> قانون‌های مهم</div><ul><li>در هر نوبت یا حرکت کن یا دیوار بذار.</li><li>نمی‌تونی راه رسیدن هیچ بازیکنی رو کامل ببندی.</li><li>اگه جلوی مهره حریف باشی، می‌تونی از روش بپری.</li><li>اولین نفر که به لبه مقابل برسه برنده‌ست.</li><li>بعد از اتمام زمان اصلی، برای هر نوبت ۲ ثانیه فرصت داری؛ اگه حرکت نکنی، با زمان می‌بازی.</li><li>روی گوشی برای گذاشتن دیوار اول پیش‌نمایش رو انتخاب کن و بعد «تأیید دیوار» بزن.</li></ul></section>
+        <section class="side-card chat-promo"><div class="side-title"><span>💬</span> گفت‌وگوی خصوصی</div><p>صفحه چت مخصوص همین اتاق؛ پیام‌ها در لحظه برای دوستت فرستاده می‌شن.</p><button id="openChatSideBtn" class="btn secondary wide">باز کردن صفحه چت <span id="chatUnreadSide" class="unread-count" hidden>۰</span></button></section>
+        <section class="side-card howto-card"><div class="side-title"><span>💡</span> قانون‌های مهم</div><ul><li>در هر نوبت یا حرکت کن یا دیوار بذار.</li><li>نمی‌تونی راه رسیدن هیچ بازیکنی رو کامل ببندی.</li><li>اگه جلوی مهره حریف باشی، می‌تونی از روش بپری.</li><li>اولین نفر که به لبه مقابل برسه برنده‌ست.</li><li>در بازی زمان‌دار، تمام شدن ساعت یعنی باخت. زیر نصف زمان، حرکتِ حداکثر ۱ ثانیه‌ای ۱ ثانیه پاداش داره.</li><li>روی گوشی برای گذاشتن دیوار اول پیش‌نمایش رو انتخاب کن و بعد «تأیید دیوار» بزن.</li></ul></section>
         <button id="newRoomBtn" class="btn ghost wide">↻ خروج و ساخت اتاق دیگر</button>
       </aside>
+    </section>
+
+    <section id="chatScreen" class="chat-screen" hidden aria-label="صفحه چت خصوصی">
+      <div class="chat-header">
+        <button id="backToGameBtn" class="btn ghost" type="button">→ برگشت به بازی</button>
+        <div class="chat-header-title"><span class="eyebrow">اتاق خصوصی <b id="chatRoomCode" dir="ltr"></b></span><h1>چت بازیکنان 💬</h1></div>
+        <div id="chatClockNotice" class="chat-clock-notice">ساعت بازی همچنان فعاله</div>
+      </div>
+      <div class="chat-card">
+        <div class="chat-subhead"><span class="live-dot"></span><strong>گفت‌وگوی دونفره</strong><span>پیام‌ها فقط برای اعضای همین اتاق نمایش داده می‌شن.</span></div>
+        <div id="chatMessages" class="chat-messages" role="log" aria-label="پیام‌های اتاق" aria-live="polite"></div>
+        <form id="chatForm" class="chat-compose">
+          <input id="chatInput" maxlength="280" autocomplete="off" placeholder="پیامت رو بنویس..." aria-label="متن پیام" required>
+          <button id="sendChatBtn" class="btn primary" type="submit">ارسال ↗</button>
+        </form>
+        <p id="chatError" class="error" role="alert" hidden></p>
+        <div id="chatCharCount" class="chat-counter">۰ / ۲۸۰</div>
+      </div>
     </section>
 
     <div id="winnerOverlay" class="modal-backdrop" hidden><div class="modal"><div class="trophy">🏆</div><h2 id="winnerTitle">برنده شدی!</h2><p id="winnerText">چه بازی قشنگی!</p><button id="rematchBtn" class="btn primary wide">دوباره بازی کنیم ↻</button></div></div>
